@@ -1,0 +1,454 @@
+{
+  "version": 1,
+  "demo": true,
+  "tasks": [
+    {
+      "id": "signup-fix",
+      "title": "修复活动报名与名额恢复",
+      "description": "为校园活动修复取消报名后的名额问题，同时保持重复请求和原有流程正确。",
+      "scenario": "coding",
+      "goals": [
+        {
+          "id": "refund",
+          "label": "取消报名后释放名额",
+          "required": true,
+          "weight": 5
+        },
+        {
+          "id": "duplicate",
+          "label": "重复请求不产生重复记录",
+          "required": true,
+          "weight": 5
+        },
+        {
+          "id": "regression",
+          "label": "原有报名流程正常",
+          "required": true,
+          "weight": 4
+        },
+        {
+          "id": "docs",
+          "label": "补充清晰的修改说明",
+          "required": false,
+          "weight": 2
+        }
+      ],
+      "runs": [
+        {
+          "id": "code-a",
+          "strategy": "快速直接修改",
+          "comparisonGroup": "代码示例 / 同一版本与模型",
+          "model": "演示模型 / 非实际调用",
+          "tokens": 3200,
+          "durationSec": 84,
+          "checks": {
+            "refund": {
+              "status": "pass",
+              "evidence": "模拟测试：取消后名额增加 1。"
+            },
+            "duplicate": {
+              "status": "fail",
+              "evidence": "模拟测试：重复请求创建了两条记录。"
+            },
+            "regression": {
+              "status": "pass",
+              "evidence": "模拟回归：普通报名通过。"
+            },
+            "docs": {
+              "status": "fail",
+              "evidence": "示例补丁没有修改说明。"
+            }
+          },
+          "events": [
+            {
+              "atSec": 0,
+              "type": "explore",
+              "label": "读取报名接口",
+              "detail": "直接定位报名处理函数。"
+            },
+            {
+              "atSec": 28,
+              "type": "act",
+              "label": "修改名额更新逻辑",
+              "detail": "增加取消时的名额回补。"
+            },
+            {
+              "atSec": 56,
+              "type": "verify",
+              "label": "运行基础测试",
+              "detail": "基础路径通过，重复请求检查未通过。"
+            }
+          ]
+        },
+        {
+          "id": "code-b",
+          "strategy": "针对目标探索",
+          "comparisonGroup": "代码示例 / 同一版本与模型",
+          "model": "演示模型 / 非实际调用",
+          "tokens": 7600,
+          "durationSec": 146,
+          "checks": {
+            "refund": {
+              "status": "pass",
+              "evidence": "模拟独立测试：取消与释放名额一致。"
+            },
+            "duplicate": {
+              "status": "pass",
+              "evidence": "模拟测试：重复请求只创建一条记录。"
+            },
+            "regression": {
+              "status": "pass",
+              "evidence": "模拟回归：原有流程通过。"
+            },
+            "docs": {
+              "status": "pass",
+              "evidence": "示例记录包含修改原因与验证方式。"
+            }
+          },
+          "events": [
+            {
+              "atSec": 0,
+              "type": "explore",
+              "label": "定位报名与取消入口",
+              "detail": "读取与必需目标相关的两个处理入口。"
+            },
+            {
+              "atSec": 36,
+              "type": "explore",
+              "label": "检查事务与去重约束",
+              "detail": "确认请求幂等键及数据库更新边界。"
+            },
+            {
+              "atSec": 73,
+              "type": "act",
+              "label": "修复并保留已有行为",
+              "detail": "在事务内更新名额，复用原有去重逻辑。"
+            },
+            {
+              "atSec": 109,
+              "type": "verify",
+              "label": "验证三项核心要求",
+              "detail": "执行取消、重复请求与回归测试。"
+            }
+          ]
+        },
+        {
+          "id": "code-c",
+          "strategy": "广泛探索后修改",
+          "comparisonGroup": "代码示例 / 同一版本与模型",
+          "model": "演示模型 / 非实际调用",
+          "tokens": 14800,
+          "durationSec": 291,
+          "checks": {
+            "refund": {
+              "status": "pass",
+              "evidence": "模拟测试通过。"
+            },
+            "duplicate": {
+              "status": "pass",
+              "evidence": "模拟测试通过。"
+            },
+            "regression": {
+              "status": "pass",
+              "evidence": "模拟回归通过。"
+            },
+            "docs": {
+              "status": "pass",
+              "evidence": "示例记录包含完整说明。"
+            }
+          },
+          "events": [
+            {
+              "atSec": 0,
+              "type": "explore",
+              "label": "阅读项目结构",
+              "detail": "遍历接口、前端和管理页面。"
+            },
+            {
+              "atSec": 58,
+              "type": "explore",
+              "label": "补充阅读通知与样式",
+              "detail": "记录这次阅读，但不能仅凭范围判定无用。"
+            },
+            {
+              "atSec": 116,
+              "type": "explore",
+              "label": "检查数据库约束",
+              "detail": "确认事务与去重规则。"
+            },
+            {
+              "atSec": 174,
+              "type": "act",
+              "label": "实施修复",
+              "detail": "更新取消逻辑。"
+            },
+            {
+              "atSec": 232,
+              "type": "verify",
+              "label": "执行验证",
+              "detail": "模拟测试结果均通过。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "campus-research",
+      "title": "整理校园 AI 使用研究简报",
+      "description": "从提供的资料包提炼可追溯结论，保留分歧与时间信息，形成简洁摘要。",
+      "scenario": "research",
+      "goals": [
+        {
+          "id": "source",
+          "label": "重要结论有可追溯的一手来源",
+          "required": true,
+          "weight": 5
+        },
+        {
+          "id": "date",
+          "label": "区分发布时间与事件时间",
+          "required": true,
+          "weight": 4
+        },
+        {
+          "id": "conflict",
+          "label": "标注来源之间的分歧",
+          "required": true,
+          "weight": 4
+        },
+        {
+          "id": "brief",
+          "label": "摘要控制在指定篇幅",
+          "required": false,
+          "weight": 2
+        }
+      ],
+      "runs": [
+        {
+          "id": "research-a",
+          "strategy": "先汇总再核查",
+          "comparisonGroup": "研究示例 / 相同资料包",
+          "model": "演示模型 / 非实际调用",
+          "tokens": 5200,
+          "durationSec": 112,
+          "checks": {
+            "source": {
+              "status": "pass",
+              "evidence": "示例引用索引对应原文片段。"
+            },
+            "date": {
+              "status": "pass",
+              "evidence": "示例中分别记录两类日期。"
+            },
+            "conflict": {
+              "status": "unknown",
+              "evidence": ""
+            },
+            "brief": {
+              "status": "pass",
+              "evidence": "示例摘要满足篇幅要求。"
+            }
+          },
+          "events": [
+            {
+              "atSec": 0,
+              "type": "explore",
+              "label": "阅读资料包",
+              "detail": "提取来源、日期和主要论点。"
+            },
+            {
+              "atSec": 37,
+              "type": "act",
+              "label": "生成简报",
+              "detail": "组织引用与摘要。"
+            },
+            {
+              "atSec": 74,
+              "type": "verify",
+              "label": "检查引用与篇幅",
+              "detail": "分歧检查尚未完成，不能宣布全部验收通过。"
+            }
+          ]
+        },
+        {
+          "id": "research-b",
+          "strategy": "围绕验收逐项核查",
+          "comparisonGroup": "研究示例 / 相同资料包",
+          "model": "演示模型 / 非实际调用",
+          "tokens": 8300,
+          "durationSec": 178,
+          "checks": {
+            "source": {
+              "status": "pass",
+              "evidence": "示例所有重要结论均关联资料片段。"
+            },
+            "date": {
+              "status": "pass",
+              "evidence": "示例日期标注通过人工复核。"
+            },
+            "conflict": {
+              "status": "pass",
+              "evidence": "示例保留了两项相互冲突的结论。"
+            },
+            "brief": {
+              "status": "pass",
+              "evidence": "示例摘要通过篇幅检查。"
+            }
+          },
+          "events": [
+            {
+              "atSec": 0,
+              "type": "explore",
+              "label": "建立来源索引",
+              "detail": "整理资料出处及时间。"
+            },
+            {
+              "atSec": 44,
+              "type": "explore",
+              "label": "比对结论分歧",
+              "detail": "查找相反结论的上下文。"
+            },
+            {
+              "atSec": 89,
+              "type": "act",
+              "label": "组织研究简报",
+              "detail": "区分共识、分歧与待验证内容。"
+            },
+            {
+              "atSec": 133,
+              "type": "verify",
+              "label": "逐项检查目标",
+              "detail": "模拟人工复核全部完成。"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "order-cleanup",
+      "title": "清洗订单数据并核对汇总",
+      "description": "处理重复订单与缺失金额，保留可追溯的清洗记录；趋势图属于可选改进。",
+      "scenario": "data",
+      "goals": [
+        {
+          "id": "dedup",
+          "label": "按订单编号正确去重",
+          "required": true,
+          "weight": 5
+        },
+        {
+          "id": "missing",
+          "label": "缺失金额保留为未知",
+          "required": true,
+          "weight": 5
+        },
+        {
+          "id": "total",
+          "label": "汇总数额可复核",
+          "required": true,
+          "weight": 4
+        },
+        {
+          "id": "chart",
+          "label": "提供可读的趋势图",
+          "required": false,
+          "weight": 2
+        }
+      ],
+      "runs": [
+        {
+          "id": "data-a",
+          "strategy": "先完成表格与图表",
+          "comparisonGroup": "数据示例 / 同一输入文件",
+          "model": "演示模型 / 非实际调用",
+          "tokens": 4100,
+          "durationSec": 78,
+          "checks": {
+            "dedup": {
+              "status": "pass",
+              "evidence": "模拟检查：按编号去重正确。"
+            },
+            "missing": {
+              "status": "fail",
+              "evidence": "示例错误：空金额被填成 0。"
+            },
+            "total": {
+              "status": "fail",
+              "evidence": "汇总未区分缺失金额。"
+            },
+            "chart": {
+              "status": "pass",
+              "evidence": "示例包含趋势图。"
+            }
+          },
+          "events": [
+            {
+              "atSec": 0,
+              "type": "explore",
+              "label": "读取表格结构",
+              "detail": "识别订单编号和金额列。"
+            },
+            {
+              "atSec": 26,
+              "type": "act",
+              "label": "清洗并绘图",
+              "detail": "去重后把缺失金额填为 0。"
+            },
+            {
+              "atSec": 52,
+              "type": "verify",
+              "label": "检查图表与行数",
+              "detail": "图表存在，但必需的缺失处理规则未通过。"
+            }
+          ]
+        },
+        {
+          "id": "data-b",
+          "strategy": "先保证数据规则",
+          "comparisonGroup": "数据示例 / 同一输入文件",
+          "model": "演示模型 / 非实际调用",
+          "tokens": 6200,
+          "durationSec": 125,
+          "checks": {
+            "dedup": {
+              "status": "pass",
+              "evidence": "模拟去重检查通过。"
+            },
+            "missing": {
+              "status": "pass",
+              "evidence": "示例空金额保留为空，并独立计数。"
+            },
+            "total": {
+              "status": "pass",
+              "evidence": "示例汇总包含有效金额与缺失记录数量。"
+            },
+            "chart": {
+              "status": "fail",
+              "evidence": "示例尚未生成可选趋势图。"
+            }
+          },
+          "events": [
+            {
+              "atSec": 0,
+              "type": "explore",
+              "label": "明确去重与缺失规则",
+              "detail": "根据任务约定保留未知值。"
+            },
+            {
+              "atSec": 41,
+              "type": "act",
+              "label": "执行数据清洗",
+              "detail": "生成清洗后的数据与变更记录。"
+            },
+            {
+              "atSec": 83,
+              "type": "verify",
+              "label": "核对汇总",
+              "detail": "模拟核算有效金额与缺失记录。"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
