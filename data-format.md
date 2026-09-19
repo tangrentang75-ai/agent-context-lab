@@ -50,3 +50,5 @@
 评估报告包含当前任务、该任务运行记录、当前目标配置、预算和比较结果。它不是输入数据集；重新导入时，将报告的 task 放到带 version、demo 和 tasks 数组的数据集中。
 
 复核修改不写回原始文件，也不自动持久保存。刷新或关闭前请导出。
+
+本机 Codex 适配器额外输出 `source`、`generatedAt`、`usage`、`patch`、`verification`、`settings` 与 `limitations`；这些字段用于保留来源声明、用量分项和验收证据，不改变 v1 核心评价规则。`source` 本身不是真实性证明。适配器保存原始记录到本机 `runs/`，页面人工修改仍需导出。
