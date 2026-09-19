@@ -1,0 +1,26 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Private and generated experiment data
+data/private/
+runs/
+artifacts/
+
+# Dependencies and generated output
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
