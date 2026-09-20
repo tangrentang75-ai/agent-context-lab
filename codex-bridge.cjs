@@ -65,7 +65,7 @@ function verifyPatch(patch) {
   const checks=Object.fromEntries(['capacity','duplicate','regression'].map(goal=>{const rows=results.filter(r=>r.goal===goal);return [goal,{status:rows.every(r=>r.actual===r.expected)?'pass':'fail',evidence:rows.map(r=>`${r.name}：预期 ${r.expected}，实际 ${r.actual}，${r.actual===r.expected?'通过':'失败'}`).join('\n')}];}));
   return {checks,results};
 }
-async function runExperiment() {
+async function runExperiment(options={}) {
   fs.mkdirSync(storage,{recursive:true});
   const work=fs.mkdtempSync(path.join(os.tmpdir(),'agent-context-smoke-'));
   const schemaPath=path.join(work,'answer.schema.json');fs.writeFileSync(schemaPath,JSON.stringify(schema));
@@ -73,7 +73,8 @@ async function runExperiment() {
   const elapsed=()=>Math.round((Date.now()-started)/100)/10;
   let usage=null, answer=null, failed=false;
   try {
-    const result=await capture(['exec','--ignore-user-config','--ephemeral','--skip-git-repo-check','--sandbox','read-only','--color','never','--json','--output-schema',schemaPath,'-'],{cwd:work,input:prompt,timeout:180000,onEvent:e=>{
+    const fixed=options.model?['--model',options.model,'-c',`model_reasoning_effort="${options.effort||'high'}"`]:[];
+    const result=await capture(['exec',...fixed,'--ignore-user-config','--ephemeral','--skip-git-repo-check','--sandbox','read-only','--color','never','--json','--output-schema',schemaPath,'-'],{cwd:work,input:options.prompt||prompt,timeout:180000,onEvent:e=>{
       if(e.type==='turn.completed')usage=e.usage;
       if(e.type==='turn.failed'||e.type==='error')failed=true;
       if(e.type==='item.completed'&&e.item?.type==='agent_message')answer=e.item.text;
@@ -90,11 +91,13 @@ async function runExperiment() {
     const tokens=usage&&numeric(usage.input_tokens)&&numeric(usage.output_tokens)?usage.input_tokens+usage.output_tokens:null;
     const id=randomUUID();
     const data=validateDataset({version:1,demo:false,source:'local-codex',generatedAt:new Date().toISOString(),tasks:[{id:'real-signup-smoke-v1',scenario:'coding',title:'真实测试：修复活动报名判断',description:'真实 Codex 调用，受限修复题；模型选择修复操作，平台在可信函数上运行 8 条测试。仅验证接入与验收链路，不等于复杂仓库修复或节省算力的证据。',goals:[{id:'capacity',label:'满员与零容量拒绝报名',weight:5,required:true},{id:'duplicate',label:'阻止同一活动重复报名',weight:5,required:true},{id:'regression',label:'跨活动与正常报名不受影响',weight:4,required:true}],runs:[{id,strategy:'Codex 默认配置 · 单次接入测试',model:'Codex CLI 默认模型（事件未提供精确型号）',comparisonGroup:`smoke-v1-${id}`,tokens,durationSec:elapsed(),checks:verification.checks,events,usage:usage||null,patch,verification:verification.results,settings:{ignoreUserConfig:true,sandbox:'read-only',promptVersion:1,modelPinned:false},limitations:['单次受限修复题，不代表真实仓库修复能力','模型未固定，当前记录不用于跨次策略比较','token 是 CLI 报告的输入加输出；缓存输入不重复相加；非硬件算力或账单价格']}]}]});
-    fs.writeFileSync(path.join(storage,`${id}.json`),JSON.stringify(data,null,2));
-    fs.writeFileSync(path.join(storage,'latest.json'),JSON.stringify(data,null,2));
+    const run=data.tasks[0].runs[0];
+    if(options.model){run.model=`${options.model} / ${options.effort||'high'}（请求配置；非不可变版本）`;run.settings={...run.settings,modelPinned:true,requestedModel:options.model,reasoningEffort:options.effort||'high'};run.limitations=run.limitations.filter(x=>!x.startsWith('模型未固定'));}
+    if(options.persist!==false){fs.writeFileSync(path.join(storage,`${id}.json`),JSON.stringify(data,null,2));fs.writeFileSync(path.join(storage,'latest.json'),JSON.stringify(data,null,2));}
     return data;
+  } catch(error) {error.observed={usage,durationSec:elapsed(),events};throw error;
   } finally {const target=path.resolve(work),root=path.resolve(os.tmpdir());if(path.dirname(target)===root&&path.basename(target).startsWith('agent-context-smoke-'))fs.rmSync(target,{recursive:true,force:true});}
 }
 function latest(){try{return validateDataset(JSON.parse(fs.readFileSync(path.join(storage,'latest.json'),'utf8')));}catch{return null;}}
-module.exports={connectionStatus,runExperiment,verifyPatch,latest};
+module.exports={connectionStatus,runExperiment,verifyPatch,latest,prompt,capture};
 if(require.main===module)runExperiment().then(data=>console.log(JSON.stringify(data,null,2))).catch(e=>{console.error(e.message);process.exitCode=1;});

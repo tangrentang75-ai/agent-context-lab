@@ -93,6 +93,7 @@ function showDetail(id) {
 }
 function renderAll() {
   notice();
+  renderStudy();
   $('compare-task').innerHTML=dataset.tasks.map(t=>`<option value="${escapeHTML(t.id)}">${escapeHTML(t.title)}</option>`).join('');
   $('compare-task').value=selectedTaskId;renderOverview();renderCompare();route();
 }
@@ -120,7 +121,15 @@ function showLive(data) {
   $('search').value='';$('scenario-filter').value='all';location.hash='compare';renderAll();
   const r=dataset.tasks[0].runs[0],u=r.usage;
   $('connection-status').textContent=`最近测试：${r.durationSec} 秒，${number(r.tokens)} tokens${u?`（输入 ${number(u.input_tokens)}，输出 ${number(u.output_tokens)}，输入中缓存 ${number(u.cached_input_tokens??null)}）`:''}。`;
+  if(dataset.source==='local-codex-study')$('connection-status').textContent=`已载入 ${dataset.tasks[0].runs.length} 次对照运行；汇总与逐次证据见下方。`;
 }
+function renderStudy() {
+  const panel=$('study-results');panel.hidden=!(localDataset&&dataset.source==='local-codex-study');if(panel.hidden)return;
+  const study=dataset.study,fmt=v=>v===null||v===undefined?'未知':Number(v).toLocaleString('zh-CN',{maximumFractionDigits:1});
+  panel.innerHTML=`<p class="eyebrow">真实对照 / ${escapeHTML(study.protocol.requestedModel)} · ${escapeHTML(study.protocol.reasoningEffort)}</p><h2>上下文对照结果</h2><p>${study.status==='complete'?'9 次预定运行已完成':study.status==='running'?'实验正在进行，可再次点击查看以更新':'实验提前停止'} · ${escapeHTML(study.protocol.cliVersion)}${study.stopReason?' · '+escapeHTML(study.stopReason):''}</p><div class="study-table-wrap"><table class="study-table"><thead><tr><th>输入配置</th><th>验收合格 / 尝试</th><th>平均总 token</th><th>token 范围</th><th>平均秒数</th><th>平均缓存输入</th></tr></thead><tbody>${study.summary.map(s=>`<tr><td>${escapeHTML(s.label)}</td><td>${s.successes} / ${s.attempts}</td><td>${fmt(s.tokens.mean)}</td><td>${fmt(s.tokens.min)}—${fmt(s.tokens.max)}</td><td>${fmt(s.durationSec.mean)}</td><td>${fmt(s.cachedInputTokens.mean)}</td></tr>`).join('')}</tbody></table></div><p class="muted">汇总基于原始自动验收；人工复核仅影响下方记录。均值覆盖所有已知成本的尝试，包含失败。未知成本 ${study.summary.reduce((n,s)=>n+s.unknownCost,0)} 条；执行失败 ${study.summary.reduce((n,s)=>n+s.executionFailures,0)} 条；出现额外工具操作 ${study.summary.reduce((n,s)=>n+s.protocolDeviations,0)} 条（已分到独立条件组）。缓存输入包含在总输入内，不重复相加。</p><p><strong>研究边界：</strong>只有一道受限选择题；模型名和推理强度固定，但不是不可变模型快照。额外资料长度不完全相同，缓存与网络也未完全控制。结果不能证明通用节省算力，也不能证明额外探索没有价值。</p><button id="study-report" class="button">导出完整对照记录</button>`;
+  $('study-report').addEventListener('click',()=>showReport(dataset));
+}
+$('load-study').addEventListener('click',async()=>{try{const r=await fetch('/api/study');const data=await r.json();if(!r.ok)throw new Error(data.error);showLive(data);$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){toast(e.message||'请启动本机服务后查看',true);}});
 async function checkConnection() {
   try {const response=await fetch('/api/status');if(!response.ok)throw new Error();const state=await response.json();$('connection-status').textContent=state.running?'真实任务正在运行，可稍后查看最近结果':state.message;$('run-live').disabled=!state.available||state.running;$('load-live').disabled=!state.hasLatest;}
   catch {$('connection-status').textContent='真实执行需要本机服务：运行 npm start 后打开 http://127.0.0.1:4173。';}

@@ -1,8 +1,8 @@
 {
   "name": "agent-context-lab",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Goal-driven AI task evaluation prototype",
-  "scripts": { "start": "node server.cjs", "test": "node --test evaluation.test.cjs bridge.test.cjs", "experiment": "node codex-bridge.cjs" },
+  "scripts": { "start": "node server.cjs", "test": "node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs", "experiment": "node codex-bridge.cjs", "study": "node context-study.cjs" },
   "engines": { "node": ">=20" }
 }
