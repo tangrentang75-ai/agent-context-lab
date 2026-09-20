@@ -3,6 +3,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const bridge = require('./codex-bridge.cjs');
 const {latestStudy} = require('./context-study.cjs');
+const {latestRetrieval} = require('./retrieval-study.cjs');
+const {latestEvidence} = require('./evidence-study.cjs');
 const allowed = {'/':'index.html','/index.html':'index.html','/styles.css':'styles.css','/app.js':'app.js','/evaluation.js':'evaluation.js','/sample-data.js':'sample-data.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
 const port = Number(process.env.PORT || 4173);
@@ -18,6 +20,8 @@ return http.createServer(async (req,res)=>{
     if(req.method==='GET'&&pathname==='/api/status'){json(200,{...await executor.connectionStatus(),running,hasLatest:!!executor.latest()});return;}
     if(req.method==='GET'&&pathname==='/api/latest'){const data=executor.latest();json(data?200:404,data||{error:'尚无真实记录'});return;}
     if(req.method==='GET'&&pathname==='/api/study'){const data=latestStudy();json(data?200:404,data||{error:'尚无对照实验记录'});return;}
+    if(req.method==='GET'&&pathname==='/api/retrieval'){const data=latestRetrieval();json(data?200:404,data||{error:'尚无检索实验记录'});return;}
+    if(req.method==='GET'&&pathname==='/api/evidence'){const data=latestEvidence();json(data?200:404,data||{error:'尚无证据补读实验记录'});return;}
     if(req.method==='POST'&&pathname==='/api/run') {
       if(req.headers['x-agent-context']!=='local-run'||req.headers.origin!==`http://${host}`){json(403,{error:'请从本机页面运行测试'});return;}
       if(running){json(409,{error:'已有任务运行中，请稍后查看最近结果'});return;}

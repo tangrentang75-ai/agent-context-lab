@@ -1,5 +1,9 @@
 # 数据格式 v1 与评价口径
 
+## 证据补读扩展（v0.5）
+
+`source: local-evidence-study` 使用 `retrievalStudy` 存储预先固定的协议与原始汇总。每条策略运行包含 `calls`（每轮答案、资料 ID、usage、引文检查）、`retrieval.stopReason`、`retrieval.fallbacks` 和 `cost`。`tokens` 为所有调用的输入与输出之和；任一轮用量未知则为 null，已知部分保留在 `cost.knownTokens`。新增结果 `budget_stopped` 表示调用间阈值阻止后续调用，不能当作任务成功。`prematureStops` 是引文检查允许停止、但独立验收未通过的次数；不表示模型内部的置信度。资料数统计唯一文档，两轮重新发送的内容仍计入 token。
+
 点击“下载示例”可获得完整 JSON，仓库也提供 `example.json`。
 
 ```json
@@ -52,3 +56,5 @@
 复核修改不写回原始文件，也不自动持久保存。刷新或关闭前请导出。
 
 本机 Codex 适配器额外输出 `source`、`generatedAt`、`usage`、`patch`、`verification`、`settings` 与 `limitations`；这些字段用于保留来源声明、用量分项和验收证据，不改变 v1 核心评价规则。`source` 本身不是真实性证明。适配器保存原始记录到本机 `runs/`，页面人工修改仍需导出。
+
+资料检索对照结果的 `source` 为 `local-retrieval-study`，并增加 `retrievalStudy.protocol`、`retrievalStudy.summary` 和每次运行的 `retrieval`。其中 `selectedIds` 是平台实际提交给模型的资料 ID，`stopReason` 是平台规则记录的停止原因，`promptSha256` 用于确认输入未被悄悄替换。`checks` 仍按 v1 规则核验：模型没有明确依据时为 `unknown`，值或来源引文不匹配时为 `fail`；`outcome` 为 `passed`、`verification_failed`、`insufficient_evidence` 或 `execution_failed`。该扩展记录实验协议，不改变“未知不算通过”的评价口径。

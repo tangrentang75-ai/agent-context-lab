@@ -17,7 +17,7 @@
       <a href="#compare" data-view="compare"><span>⇄</span>策略比较</a>
       <a href="#research" data-view="research"><span>⌁</span>课题与路线</a>
     </nav>
-    <div class="sidebar-note"><span class="small-dot"></span>本地评估工作台<p>从“做了多少”<br>走向“完成了什么”。</p><small>v0.3 · 上下文对照</small></div>
+    <div class="sidebar-note"><span class="small-dot"></span>本地评估工作台<p>从“做了多少”<br>走向“完成了什么”。</p><small>v0.5 · 证据与补读</small></div>
     <div class="sidebar-footer"><span class="avatar">研</span><div>大创研究空间<small>目标驱动 · 证据可查</small></div></div>
   </aside>
   <main id="main">
@@ -26,7 +26,9 @@
       <section class="page-heading"><div><p class="eyebrow">HUMAN GOALS, MEASURABLE OUTCOMES</p><h1 id="page-title">让 AI 的投入，对准你的目标。</h1><p id="page-subtitle">把目标、执行与验收放在一起，理解每一次任务的取舍。</p></div><div class="header-actions"><button id="template-button" class="button">下载示例</button><button id="import-button" class="button primary">＋ 导入记录</button><input id="file-input" type="file" accept=".json,application/json" hidden></div></section>
       <div id="notice" class="notice" role="status"></div>
       <section class="panel study-entry"><div><p class="eyebrow">CONTEXT EXPERIMENT</p><h2>更多上下文，带来了什么？</h2><p>同一道题、三种输入、每组 3 次。查看独立验收和完整用量，先观察，再下结论。</p></div><button id="load-study" class="button">查看上下文对照</button></section>
+      <section class="panel study-entry"><div><p class="eyebrow">EVIDENCE & RECOVERY</p><h2>证据不够时，再读一步。</h2><p>检查所引正文，缺失时补读剩余资料。比较最终完成情况，并把第二次调用的代价一起计算。</p></div><button id="load-evidence" class="button primary">查看证据补读实验</button></section>
       <section id="study-results" class="panel" hidden></section>
+      <section class="panel study-entry"><div><p class="eyebrow">RETRIEVAL & STOPPING</p><h2>资料读到哪一步才够？</h2><p>三个配置恢复任务，对比固定读取、全部读取与按目标标签停止；包含标签错误的压力任务。</p></div><button id="load-retrieval" class="button primary">查看检索与停止实验</button></section>
       <section class="panel live-panel"><div><p class="eyebrow">真实执行 / LOCAL CODEX</p><h2>让 AI 真正跑一次。</h2><p id="connection-status" role="status">正在检查本机连接…</p><p class="muted">固定报名修复题 · 8 条独立验收 · 每次运行使用你的 Codex 额度。完成后显示真实记录，最近结果保存在本机。</p></div><div class="live-actions"><button id="run-live" class="button primary" disabled>运行真实测试</button><button id="load-live" class="button" disabled>查看最近结果</button></div></section>
       <section id="view-overview">
         <div id="stats" class="stats"></div>

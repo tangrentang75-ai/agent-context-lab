@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "id": "room-booking", "title": "自习室预约配置", "description": "根据资料恢复预约时长上限、取消截止和同时持有预约数量三项软件配置。",
+      "goals": [
+        {"id":"duration","label":"单次预约时长上限（分钟）","expected":"70","sourceId":"01","sentence":"单次预约时长上限为 70 分钟。"},
+        {"id":"cancel","label":"取消须至少提前的时间（分钟）","expected":"9","sourceId":"03","sentence":"取消预约须至少提前 9 分钟。"},
+        {"id":"quota","label":"同时持有的有效预约数量上限","expected":"2","sourceId":"05","sentence":"每人最多同时持有 2 个有效预约。"}
+      ],
+      "documents": [
+        {"id":"01","tags":["duration"],"text":"预约服务规范 v1。单次预约时长上限为 70 分钟。边界值允许，超过上限拒绝。"},
+        {"id":"02","tags":["appearance"],"text":"界面设计：卡片采用浅色背景，取消按钮使用描边样式，列表按日期排列。"},
+        {"id":"03","tags":["cancel"],"text":"取消服务规范 v1。取消预约须至少提前 9 分钟。恰好达到截止边界时允许取消。"},
+        {"id":"04","tags":["operations"],"text":"运维记录：展示页有缓存，图片有缩略版本，日志按周归档。"},
+        {"id":"05","tags":["quota"],"text":"配额规范 v1。每人最多同时持有 2 个有效预约。取消后的记录不占配额。"},
+        {"id":"06","tags":["accessibility"],"text":"可访问性：按钮提供文字说明，图标配有标签，表单支持键盘操作。"}
+      ]
+    },
+    {
+      "id": "notification-retry", "title": "通知服务重试配置", "description": "根据资料恢复通知服务的重试次数、重试间隔和消息过期时间三项配置。",
+      "goals": [
+        {"id":"attempts","label":"首次发送后最多额外重试次数","expected":"4","sourceId":"01","sentence":"首次发送失败后最多额外重试 4 次。"},
+        {"id":"interval","label":"两次重试之间的间隔（秒）","expected":"13","sourceId":"04","sentence":"两次重试之间间隔 13 秒。"},
+        {"id":"expiry","label":"消息从创建起的有效时长（分钟）","expected":"37","sourceId":"06","sentence":"消息从创建起有效时长为 37 分钟。"}
+      ],
+      "documents": [
+        {"id":"01","tags":["attempts"],"text":"可靠性规范 v1。首次发送失败后最多额外重试 4 次。首次发送不计入重试次数。"},
+        {"id":"02","tags":["appearance"],"text":"消息中心展示未读标记，已读消息以浅灰文字显示，筛选栏可折叠。"},
+        {"id":"03","tags":["operations"],"text":"日志平台记录消息编号，仪表盘按服务分组，报表每周汇总。"},
+        {"id":"04","tags":["interval"],"text":"调度规范 v1。两次重试之间间隔 13 秒。达到该间隔方可再次发送。"},
+        {"id":"05","tags":["accessibility"],"text":"通知声音可关闭，字体遵循全站设置，发送状态提供文字描述。"},
+        {"id":"06","tags":["expiry"],"text":"时效规范 v1。消息从创建起有效时长为 37 分钟。到期即停止发送，避免过时消息打扰用户。"}
+      ]
+    },
+    {
+      "id": "equipment-loan", "title": "设备借用配置（标签错误压力任务）", "description": "根据资料恢复借用时长、预约保留和同时借用数量。文件目录中有一项标签标错，正文才是业务依据。",
+      "goals": [
+        {"id":"duration","label":"单次借用时长上限（小时）","expected":"19","sourceId":"01","sentence":"单次借用时长上限为 19 小时。"},
+        {"id":"hold","label":"预约设备等待领取的保留时长（分钟）","expected":"17","sourceId":"05","sentence":"预约设备等待领取的保留时长为 17 分钟。"},
+        {"id":"quota","label":"同一用户同时借用设备数量上限","expected":"3","sourceId":"04","sentence":"同一用户最多同时借用 3 台设备。"}
+      ],
+      "documents": [
+        {"id":"01","tags":["duration"],"text":"借用期限规范 v1。单次借用时长上限为 19 小时。超出期限需先归还再办理。"},
+        {"id":"02","tags":["appearance"],"text":"设备展示使用照片卡片，分类包括摄影、录音和计算设备。"},
+        {"id":"03","tags":["hold"],"text":"界面规范：预约卡片显示领取地点和联系人，但本文件未规定任何保留时长。"},
+        {"id":"04","tags":["quota"],"text":"设备配额规范 v1。同一用户最多同时借用 3 台设备。已归还设备不占额度。"},
+        {"id":"05","tags":[],"text":"领取规范 v1。预约设备等待领取的保留时长为 17 分钟。达到时限自动释放预约。"},
+        {"id":"06","tags":["operations"],"text":"资产盘点按月完成，设备封面照片可由管理员更新，损坏情况单独登记。"}
+      ]
+    }
+  ]
+}

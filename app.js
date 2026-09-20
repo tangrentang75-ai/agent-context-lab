@@ -30,7 +30,7 @@ function currentTask() { return dataset.tasks.find(t => t.id === selectedTaskId)
 function notice() {
   $('notice').innerHTML = dataset.demo
     ? '<span class="notice-icon">i</span><div><strong>当前为人工构造的演示数据</strong><span>下方记录用于体验交互。可点击“运行真实测试”获取实际模型记录。</span></div><span class="tag">DEMO</span>'
-    : localDataset ? '<span class="notice-icon">✓</span><div><strong>当前显示本机 Codex 真实执行记录</strong><span>8 条独立测试；用量来自执行器。原始结果保存在本机，人工复核修改需导出留存。单次测试不代表策略提升。</span></div><span class="tag">LIVE</span>'
+    : localDataset ? '<span class="notice-icon">✓</span><div><strong>当前显示本机 Codex 真实执行记录</strong><span>逐项独立验收；用量来自执行器。原始结果保存在本机，人工复核修改需导出留存。少量任务不代表普遍提升。</span></div><span class="tag">LIVE</span>'
     : '<span class="notice-icon">i</span><div><strong>当前为你导入的记录</strong><span>数据仅在当前页面内存中处理；来源与验收证据需自行复核。刷新会恢复示例，请导出保存。</span></div><span class="tag">IMPORTED</span>';
 }
 function renderOverview() {
@@ -124,12 +124,42 @@ function showLive(data) {
   if(dataset.source==='local-codex-study')$('connection-status').textContent=`已载入 ${dataset.tasks[0].runs.length} 次对照运行；汇总与逐次证据见下方。`;
 }
 function renderStudy() {
-  const panel=$('study-results');panel.hidden=!(localDataset&&dataset.source==='local-codex-study');if(panel.hidden)return;
+  const panel=$('study-results');panel.hidden=!(localDataset&&['local-codex-study','local-retrieval-study','local-evidence-study'].includes(dataset.source));if(panel.hidden)return;
+  if(dataset.source==='local-evidence-study'){renderEvidence(panel);return;}
+  if(dataset.source==='local-retrieval-study'){renderRetrieval(panel);return;}
   const study=dataset.study,fmt=v=>v===null||v===undefined?'未知':Number(v).toLocaleString('zh-CN',{maximumFractionDigits:1});
   panel.innerHTML=`<p class="eyebrow">真实对照 / ${escapeHTML(study.protocol.requestedModel)} · ${escapeHTML(study.protocol.reasoningEffort)}</p><h2>上下文对照结果</h2><p>${study.status==='complete'?'9 次预定运行已完成':study.status==='running'?'实验正在进行，可再次点击查看以更新':'实验提前停止'} · ${escapeHTML(study.protocol.cliVersion)}${study.stopReason?' · '+escapeHTML(study.stopReason):''}</p><div class="study-table-wrap"><table class="study-table"><thead><tr><th>输入配置</th><th>验收合格 / 尝试</th><th>平均总 token</th><th>token 范围</th><th>平均秒数</th><th>平均缓存输入</th></tr></thead><tbody>${study.summary.map(s=>`<tr><td>${escapeHTML(s.label)}</td><td>${s.successes} / ${s.attempts}</td><td>${fmt(s.tokens.mean)}</td><td>${fmt(s.tokens.min)}—${fmt(s.tokens.max)}</td><td>${fmt(s.durationSec.mean)}</td><td>${fmt(s.cachedInputTokens.mean)}</td></tr>`).join('')}</tbody></table></div><p class="muted">汇总基于原始自动验收；人工复核仅影响下方记录。均值覆盖所有已知成本的尝试，包含失败。未知成本 ${study.summary.reduce((n,s)=>n+s.unknownCost,0)} 条；执行失败 ${study.summary.reduce((n,s)=>n+s.executionFailures,0)} 条；出现额外工具操作 ${study.summary.reduce((n,s)=>n+s.protocolDeviations,0)} 条（已分到独立条件组）。缓存输入包含在总输入内，不重复相加。</p><p><strong>研究边界：</strong>只有一道受限选择题；模型名和推理强度固定，但不是不可变模型快照。额外资料长度不完全相同，缓存与网络也未完全控制。结果不能证明通用节省算力，也不能证明额外探索没有价值。</p><button id="study-report" class="button">导出完整对照记录</button>`;
   $('study-report').addEventListener('click',()=>showReport(dataset));
 }
 $('load-study').addEventListener('click',async()=>{try{const r=await fetch('/api/study');const data=await r.json();if(!r.ok)throw new Error(data.error);showLive(data);$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){toast(e.message||'请启动本机服务后查看',true);}});
+function renderRetrieval(panel){
+  const s=dataset.retrievalStudy,fmt=v=>v===null?'未知':Number(v).toLocaleString('zh-CN',{maximumFractionDigits:1});
+  panel.innerHTML=`<p class="eyebrow">真实调用 · 平台选择资料</p><h2>检索与停止实验</h2><p>${s.status==='complete'?'9 次预定调用已完成':s.status==='running'?'实验进行中，点击查看可刷新':'实验提前停止'} · ${escapeHTML(s.protocol.model)} / ${escapeHTML(s.protocol.effort)}</p><div class="study-table-wrap"><table class="study-table"><thead><tr><th>读取策略</th><th>任务合格 / 尝试</th><th>平均资料数</th><th>平均总 token</th><th>平均秒数</th></tr></thead><tbody>${s.summary.map(row=>`<tr><td>${escapeHTML(row.label)}</td><td>${row.successes} / ${row.attempts}</td><td>${fmt(row.meanFiles)}</td><td>${fmt(row.meanTokens)}</td><td>${fmt(row.meanSeconds)}</td></tr>`).join('')}</tbody></table></div><h3>逐任务结果</h3><div class="study-table-wrap"><table class="study-table"><thead><tr><th>任务</th>${s.summary.map(p=>`<th>${escapeHTML(p.label)}</th>`).join('')}</tr></thead><tbody>${dataset.tasks.map(t=>`<tr><td><button class="text-button" data-retrieval-task="${escapeHTML(t.id)}">${escapeHTML(t.title)}</button></td>${s.summary.map(p=>{const r=t.runs.find(r=>r.policy===p.id);return `<td>${!r?'尚未运行':({passed:'合格',insufficient_evidence:'证据不足',verification_failed:'验收未通过',execution_failed:'执行失败'}[r.outcome]||'未知')}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div><p class="muted">汇总采用原始验收；下方允许人工复核。未知成本 ${s.summary.reduce((n,x)=>n+x.unknownCosts,0)} 条，执行失败 ${s.summary.reduce((n,x)=>n+x.executionFailures,0)} 条，额外模型工具事件涉及 ${s.summary.reduce((n,x)=>n+x.protocolDeviations,0)} 次运行。均值包含失败的已知成本。平台规则未额外调用模型，读取与选择的本机耗时已计入总时长。</p><p><strong>研究边界：</strong>资料由平台按手工标签选择，模型负责从所选正文恢复配置。标签覆盖不代表证据充分。只有 3 个人工任务，每任务每策略 1 次；验收核对配置与引用，不是完整代码测试，不能证明自主探索或通用算力优化。</p><button id="retrieval-export" class="button">导出检索实验完整记录</button>`;
+  panel.querySelectorAll('[data-retrieval-task]').forEach(button=>button.addEventListener('click',()=>{selectTask(button.dataset.retrievalTask);$('compare-content').scrollIntoView({behavior:'smooth',block:'start'});}));
+  $('retrieval-export').addEventListener('click',()=>showReport(dataset));
+}
+$('load-retrieval').addEventListener('click',async()=>{try{const r=await fetch('/api/retrieval');const data=await r.json();if(!r.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent=`已载入 ${data.tasks.length} 个任务、${data.tasks.reduce((n,t)=>n+t.runs.length,0)} 次检索实验记录。`;$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){toast(e.message||'请启动本机服务后查看',true);}});
+function renderEvidence(panel) {
+  const study=dataset.retrievalStudy,fmt=v=>v==null?'未知':Number(v).toLocaleString('zh-CN',{maximumFractionDigits:1});
+  const runs=dataset.tasks.flatMap(t=>t.runs),total=study.protocol.schedule.length;
+  const sourceFormatRuns=runs.filter(run=>Object.values(run.answer||{}).some(field=>typeof field?.sourceId==='string'&&/^资料\s+\d+$/.test(field.sourceId)));
+  const outcomeLabel={passed:'合格',insufficient_evidence:'证据不足',verification_failed:'验收未通过',execution_failed:'执行失败',budget_stopped:'额度阈值停止'};
+  panel.innerHTML=`<p class="eyebrow">真实调用 · 开发任务集</p><h2>正文有依据，才考虑停止</h2>
+    <p>${runs.length} / ${total} 次策略运行已记录 · ${study.status==='complete'?'本轮完成':study.status==='running'?'仍在进行，可再次点击刷新':'已提前停止'} · ${escapeHTML(study.protocol.model)} / ${escapeHTML(study.protocol.effort)}</p>
+    <p>先检查配置值和引文能否对应到已读正文；检查未通过就补读剩余资料。标准答案仅用于策略结束后的独立验收。</p>
+    ${sourceFormatRuns.length?`<p class="notice"><strong>来源格式需复核：</strong>本轮 ${sourceFormatRuns.length} 条记录使用了“资料 01”这类写法，严格验收要求“01”。原始结论保留；请查看具体答案，不能把格式差异直接解释为任务理解能力差异。</p>`:''}
+    <div class="study-table-wrap"><table class="study-table"><thead><tr><th>策略</th><th>合格 / 尝试</th><th>平均资料数</th><th>模型调用总数</th><th>补读后调用</th><th>平均总 token</th><th>平均秒数</th></tr></thead><tbody>${study.summary.map(row=>`<tr><td>${escapeHTML(row.label)}</td><td>${row.successes} / ${row.attempts}</td><td>${fmt(row.meanFiles)}</td><td>${row.modelCalls}</td><td>${row.fallbacks}</td><td>${fmt(row.meanTokens)}</td><td>${fmt(row.meanSeconds)}</td></tr>`).join('')}</tbody></table></div>
+    <h3>每一步的资料和代价</h3><div class="study-table-wrap"><table class="study-table"><thead><tr><th>任务 / 策略</th><th>各次调用</th><th>停止原因</th><th>最终独立验收</th></tr></thead><tbody>${dataset.tasks.flatMap(task=>task.runs.map(run=>`<tr><td><button class="text-button" data-evidence-task="${escapeHTML(task.id)}">${escapeHTML(task.title)}</button><br>${escapeHTML(run.strategy)}</td><td>${run.calls.map(call=>`第 ${call.round} 次：资料 ${escapeHTML(call.selectedIds.join('、'))}<br>${fmt(call.usage&&Number.isFinite(call.usage.input_tokens)&&Number.isFinite(call.usage.output_tokens)?call.usage.input_tokens+call.usage.output_tokens:null)} tokens`).join('<br><br>')}</td><td>${escapeHTML(run.retrieval.stopReason)}${run.error?'<br>'+escapeHTML(run.error):''}</td><td>${escapeHTML(outcomeLabel[run.outcome]||'未知')}</td></tr>`)).join('')}</tbody></table></div>
+    <p class="muted">已知累计 ${fmt(study.cost.knownTokens)} tokens；用量未知 ${study.cost.unknownCalls} 次调用。两轮输入和输出均计入，缓存输入不重复相加。误停 ${study.summary.reduce((n,row)=>n+row.prematureStops,0)} 次（检查通过后最终验收仍未完成）。汇总保留原始自动验收；下方人工复核不改写它。</p>
+    <p><strong>当前边界：</strong>沿用上一轮的三个开发任务，每格一次，尚未做独立验证。引文真实和数值匹配不代表语义正确，也不能保证没有冲突；这一步只修补可识别的证据缺失。</p>
+    <button id="evidence-export" class="button">导出完整补读实验记录</button>`;
+  panel.querySelectorAll('[data-evidence-task]').forEach(button=>button.addEventListener('click',()=>{selectTask(button.dataset.evidenceTask);$('compare-content').scrollIntoView({behavior:'smooth',block:'start'});}));
+  $('evidence-export').addEventListener('click',()=>showReport(dataset));
+}
+$('load-evidence').addEventListener('click',async()=>{
+  try{const response=await fetch('/api/evidence'),data=await response.json();if(!response.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent=`已载入 ${data.tasks.length} 个任务的证据补读实验；调用与成本见下表。`;$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}
+  catch(e){toast(e.message||'请启动本机服务后查看',true);}
+});
 async function checkConnection() {
   try {const response=await fetch('/api/status');if(!response.ok)throw new Error();const state=await response.json();$('connection-status').textContent=state.running?'真实任务正在运行，可稍后查看最近结果':state.message;$('run-live').disabled=!state.available||state.running;$('load-live').disabled=!state.hasLatest;}
   catch {$('connection-status').textContent='真实执行需要本机服务：运行 npm start 后打开 http://127.0.0.1:4173。';}
