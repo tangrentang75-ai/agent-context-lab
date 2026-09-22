@@ -5,7 +5,7 @@
   <meta name="description" content="以用户目标为起点，复核 AI 任务的验收证据、执行过程与资源投入。">
   <title>任务罗盘 · Agent Context Lab</title>
   <link rel="stylesheet" href="styles.css">
-  <script defer src="evaluation.js"></script><script defer src="sample-data.js"></script><script defer src="app.js"></script>
+  <script defer src="evaluation.js"></script><script defer src="sample-data.js"></script><script defer src="cost-model.js"></script><script defer src="app.js"></script><script defer src="cost-ui.js"></script>
 </head>
 <body>
   <a class="skip" href="#main">跳转到主要内容</a>
@@ -17,7 +17,7 @@
       <a href="#compare" data-view="compare"><span>⇄</span>策略比较</a>
       <a href="#research" data-view="research"><span>⌁</span>课题与路线</a>
     </nav>
-    <div class="sidebar-note"><span class="small-dot"></span>本地评估工作台<p>从“做了多少”<br>走向“完成了什么”。</p><small>v0.5 · 证据与补读</small></div>
+    <div class="sidebar-note"><span class="small-dot"></span>本地评估工作台<p>从“做了多少”<br>走向“完成了什么”。</p><small>v0.6 · 补读是否划算</small></div>
     <div class="sidebar-footer"><span class="avatar">研</span><div>大创研究空间<small>目标驱动 · 证据可查</small></div></div>
   </aside>
   <main id="main">
@@ -25,6 +25,15 @@
     <div class="page">
       <section class="page-heading"><div><p class="eyebrow">HUMAN GOALS, MEASURABLE OUTCOMES</p><h1 id="page-title">让 AI 的投入，对准你的目标。</h1><p id="page-subtitle">把目标、执行与验收放在一起，理解每一次任务的取舍。</p></div><div class="header-actions"><button id="template-button" class="button">下载示例</button><button id="import-button" class="button primary">＋ 导入记录</button><input id="file-input" type="file" accept=".json,application/json" hidden></div></section>
       <div id="notice" class="notice" role="status"></div>
+      <section class="panel study-entry"><div><p class="eyebrow">COST EXPLORER</p><h2>少读一点，真的更省吗？</h2><p>调节补读概率和每次调用成本，找出两种方式的用量持平点。只做估算，不发起模型调用。</p></div><button id="open-cost" class="button primary">打开成本推演</button></section>
+      <section id="cost-lab" class="panel" hidden>
+        <h2>什么时候值得先少读？</h2><p>假设两种方式能达到同样的验收质量。这里仅比较 token；不会据此自动改变执行策略。</p>
+        <form id="cost-form" class="cost-fields"><label for="cost-full">一次全读的总 token<input id="cost-full" type="number" min="0" max="1000000000" step="any" value="15000"></label><label for="cost-first">先少读的首次 token<input id="cost-first" type="number" min="0" max="1000000000" step="any" value="14800"></label><label for="cost-second">发生补读时，第二次的 token<input id="cost-second" type="number" min="0" max="1000000000" step="any" value="15000"></label><label for="cost-probability">需要第二次调用的概率（%）<input id="cost-probability" type="number" min="0" max="100" step="any" value="33.3333333333"></label></form>
+        <div class="live-actions"><button id="cost-calibrate" class="button">填入上轮实测成本</button><button id="cost-export" class="button">导出当前假设与估算</button></div>
+        <p id="cost-origin" class="muted">手动假设，尚未引用实测记录。</p><div id="cost-result" aria-live="polite"></div>
+        <p class="muted">补读概率需要独立样本估计，不能用成功率替代。少量数据算出的持平点仅供研究设计参考，不是已经验证的调度规则。</p>
+      </section>
+      <section class="panel study-entry"><div><p class="eyebrow">NEW TASK CHECK</p><h2>换一组任务，结果怎样？</h2><p>两项新编校园服务任务，来源编号在运行前限定格式。与旧结果分开记录，检查补读行为和总成本。</p></div><button id="load-validation" class="button">查看新任务检查</button></section>
       <section class="panel study-entry"><div><p class="eyebrow">CONTEXT EXPERIMENT</p><h2>更多上下文，带来了什么？</h2><p>同一道题、三种输入、每组 3 次。查看独立验收和完整用量，先观察，再下结论。</p></div><button id="load-study" class="button">查看上下文对照</button></section>
       <section class="panel study-entry"><div><p class="eyebrow">EVIDENCE & RECOVERY</p><h2>证据不够时，再读一步。</h2><p>检查所引正文，缺失时补读剩余资料。比较最终完成情况，并把第二次调用的代价一起计算。</p></div><button id="load-evidence" class="button primary">查看证据补读实验</button></section>
       <section id="study-results" class="panel" hidden></section>
@@ -36,7 +45,7 @@
         <section class="bottom-grid"><div class="panel philosophy"><p class="eyebrow">研究出发点</p><h2>额外一步，<br>也可能是必要的一步。</h2><p>重复搜索、补充验证与返工都有不同成因。我们保留过程和证据，不根据操作次数直接判定浪费。</p><a href="#research">查看研究边界 <span>↗</span></a></div><div class="panel workflow"><h2>从目标到证据</h2><ol><li><span>01</span><div><strong>定义你真正需要的结果</strong><p>区分必须完成的要求与可选改进。</p></div></li><li><span>02</span><div><strong>复核 AI 实际完成了什么</strong><p>每项验收都有证据，缺失证据保留为未知。</p></div></li><li><span>03</span><div><strong>在合格结果中比较投入</strong><p>只有可比、通过验收的记录才参与成本筛选。</p></div></li></ol></div></section>
       </section>
       <section id="view-compare" hidden><div class="panel"><div class="section-heading"><div><h2>同一目标，不同执行路径</h2><p>调整预算与目标权重，查看已有记录在当前条件下的表现。</p></div><label>选择任务 <select id="compare-task"></select></label></div><div id="compare-content"></div></div></section>
-      <section id="view-research" hidden><div class="research-layout"><article class="panel"><p class="eyebrow">课题定位 / WORKING HYPOTHESIS</p><h2>面向用户目标的智能体任务评估<br>与资源分配方法研究</h2><p>软件成果是一套独立的任务评估平台；连接不同 AI 工具的适配器可以作为插件。首个研究场景是代码修复，资料研究与数据处理用于展示可扩展的产品结构。</p><h3>准备验证的问题</h3><p>在明确任务目标、必要约束与预算之后，能否更准确地判断额外探索是否值得，并据此改进资源分配？当前原型仅支持事后评估，没有在线控制智能体。</p><h3>已有工作与差异</h3><p>Langfuse 已覆盖追踪、成本和评估；RideWay 研究交互效率与任务成功；AcCoRD 研究动态用户偏好。目标、证据与资源预算的结合是候选研究切入点，尚未证明独立创新性。</p><div class="source-links"><a href="https://langfuse.com/" target="_blank" rel="noopener">Langfuse ↗</a><a href="https://arxiv.org/abs/2609.17985" target="_blank" rel="noopener">RideWay ↗</a><a href="https://arxiv.org/abs/2608.27818" target="_blank" rel="noopener">AcCoRD ↗</a></div></article><aside class="panel roadmap"><h2>逐步做实</h2><div class="roadmap-item done"><span>01</span><div><strong>目标与证据原型</strong><p>导入记录、验收复核、预算比较、报告导出。</p><small>本版已实现</small></div></div><div class="roadmap-item"><span>02</span><div><strong>真实代码任务实验</strong><p>已接入 Codex 并验证固定修复题；完整仓库实验待开展。</p><small>待开展</small></div></div><div class="roadmap-item"><span>03</span><div><strong>研究资源分配策略</strong><p>在保留任务质量的前提下，比较探索停止与预算分配方法。</p><small>待实验验证</small></div></div><div class="roadmap-item"><span>04</span><div><strong>扩展第二类场景</strong><p>选取具有明确验收标准的资料或数据任务。</p><small>根据实验结果决定</small></div></div></aside></div></section>
+      <section id="view-research" hidden><div class="research-layout"><article class="panel"><p class="eyebrow">课题定位 / WORKING HYPOTHESIS</p><h2>面向用户目标的智能体任务评估<br>与资源分配方法研究</h2><p>软件成果是一套独立的任务评估平台；连接不同 AI 工具的适配器可以作为插件。首个研究场景是代码修复，资料研究与数据处理用于展示可扩展的产品结构。</p><h3>准备验证的问题</h3><p>在明确任务目标、必要约束与预算之后，能否更准确地判断额外探索是否值得，并据此改进资源分配？当前支持事后评估，以及固定资料任务中最多两轮的证据补读。成本推演用于比较假设，尚不能自动调度通用智能体。</p><h3>已有工作与差异</h3><p>Langfuse 已覆盖追踪、成本和评估；RideWay 研究交互效率与任务成功；AcCoRD 研究动态用户偏好。目标、证据与资源预算的结合是候选研究切入点，尚未证明独立创新性。</p><div class="source-links"><a href="https://langfuse.com/" target="_blank" rel="noopener">Langfuse ↗</a><a href="https://arxiv.org/abs/2609.17985" target="_blank" rel="noopener">RideWay ↗</a><a href="https://arxiv.org/abs/2608.27818" target="_blank" rel="noopener">AcCoRD ↗</a></div></article><aside class="panel roadmap"><h2>逐步做实</h2><div class="roadmap-item done"><span>01</span><div><strong>目标与证据原型</strong><p>导入记录、验收复核、预算比较、报告导出。</p><small>本版已实现</small></div></div><div class="roadmap-item"><span>02</span><div><strong>真实代码任务实验</strong><p>已接入 Codex 并验证固定修复题；完整仓库实验待开展。</p><small>待开展</small></div></div><div class="roadmap-item"><span>03</span><div><strong>研究资源分配策略</strong><p>已比较标签停止、证据补读与总用量；继续检验不同资料长度与错误率。</p><small>小样本实验进行中</small></div></div><div class="roadmap-item"><span>04</span><div><strong>扩展第二类场景</strong><p>已加入资料配置恢复任务，下一步扩大任务来源和规模。</p><small>已开展资料任务实验</small></div></div></aside></div></section>
       <footer class="page-footer">Agent Context Lab <span>观察行为，验证结果；不推断模型内部思维。</span><button id="reset-button" class="text-button">恢复内置示例</button></footer>
     </div>
   </main>

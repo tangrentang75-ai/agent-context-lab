@@ -2,7 +2,7 @@
 
 **以用户目标为起点，复核 AI 任务的验收证据、执行过程与资源投入。**
 
-大学生创新创业训练计划候选项目。当前 v0.5 提供网页评估、本机 Codex 执行连接、上下文对照、资料检索与证据补读实验。内置演示数据仍为人工构造；真实记录单独显示。尚无通用性能提升结论。
+大学生创新创业训练计划候选项目。当前 v0.6 提供网页评估、本机 Codex 执行连接、上下文与检索实验、证据补读及交互式成本推演。内置演示数据仍为人工构造；真实记录单独显示。尚无通用性能提升结论。
 
 ## 扩展后的课题定位
 
@@ -35,6 +35,8 @@ v0.5 增加受限的在线补读控制器：检查已读正文中的引用与数
 
 ## 运行
 
+v0.6 新增“打开成本推演”，比较一次全读与可能补读的期望 token，可填入上轮实测成本或手动调整假设；它不调用模型，也不预测质量。另有两个新编任务、5 次真实调用的迁移检查，运行前约束来源编号格式，两策略均通过，补读策略平均 token 高约 49.3%。详见 [成本推演与新任务报告](cost-validation-report.md)。
+
 直接用浏览器打开 `index.html` 即可使用。也可以在 Node.js 20 或以上版本下运行：
 
 ```sh
@@ -55,13 +57,15 @@ npm start
 npm test
 ```
 
-或 `node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs`。测试本身不会调用模型。
+或 `node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs`。测试本身不会调用模型。
 
 上下文对照运行：`node context-study.cjs` 或 `npm run study`。最多 9 次；连续两次执行失败或已报告累计用量达到 180,000 tokens 后停止后续调用，不自动重试。停止阈值是调用间检查，非硬性计费上限。它不会修改原来的单次测试结果；完成后在网页点击“查看上下文对照”。
 
 资料检索对照运行：`node retrieval-study.cjs` 或 `npm run retrieval`。同样最多 9 次，保存每次选择的资料、停止原因、配置答案和独立核验结果；完成后在网页点击“查看检索与停止实验”。这项实验的检索是平台规则，不是模型自主搜索。
 
 证据补读运行：`node evidence-study.cjs` 或 `npm run evidence`。3 任务 × 2 策略，最多 9 次模型调用；两轮用量累加，部分用量缺失时总成本仍为未知。网页点击“查看证据补读实验”，可逐轮复核所读资料、token 和停止原因。旧实验结果保留在各自文件中。
+
+新任务检查：`node validation-study.cjs` 或 `npm run validation`，最多 6 次模型调用、120,000 已知累计 tokens 的调用间阈值；完成后点击“查看新任务检查”。使用预先限制的来源 ID，旧实验默认格式与原始评分保留。
 
 测试覆盖质量门槛、缺失证据、缺失成本、预算限制、条件组隔离、无效导入和并列结果。浏览器还应检查导入、预算交互、人工复核与报告导出。
 

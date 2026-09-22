@@ -20,7 +20,7 @@ function buildPrompt(task,docs){return `你在恢复软件配置。只使用本�
 待恢复字段：${task.goals.map(g=>g.id+'：'+g.label).join('；')}。
 逐字段输出 value（数字用字符串）、sourceId（资料 ID）和 quote（包含该配置规则的完整原句）。资料不支持时三个值都为 null。输出 JSON。
 提供的资料：\n${docs.map(d=>'[资料 '+d.id+']\n'+d.text).join('\n\n')}`;}
-function answerSchema(task){return {type:'object',additionalProperties:false,required:task.goals.map(g=>g.id),properties:Object.fromEntries(task.goals.map(g=>[g.id,{type:'object',additionalProperties:false,required:['value','sourceId','quote'],properties:{value:{type:['string','null']},sourceId:{type:['string','null']},quote:{type:['string','null']}}}]))};}
+function answerSchema(task,allowedSourceIds){return {type:'object',additionalProperties:false,required:task.goals.map(g=>g.id),properties:Object.fromEntries(task.goals.map(g=>[g.id,{type:'object',additionalProperties:false,required:['value','sourceId','quote'],properties:{value:{type:['string','null']},sourceId:allowedSourceIds?{type:['string','null'],enum:[...allowedSourceIds,null]}:{type:['string','null']},quote:{type:['string','null']}}}]))};}
 function verify(task,answer,docs){
   const checks=Object.create(null);
   for(const g of task.goals){const a=answer?.[g.id];
@@ -32,8 +32,8 @@ function verify(task,answer,docs){
   }
   return checks;
 }
-async function infer(task,prompt,onEvent){
-  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'acl-retrieval-'));const schema=path.join(folder,'answer.json');fs.writeFileSync(schema,JSON.stringify(answerSchema(task)));
+async function infer(task,prompt,onEvent,{allowedSourceIds}={}){
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'acl-retrieval-'));const schema=path.join(folder,'answer.json');fs.writeFileSync(schema,JSON.stringify(answerSchema(task,allowedSourceIds)));
   let answer,usage=null,failed=false,toolEvents=0;
   try{const result=await capture(['exec','--model','gpt-6-astra','-c','model_reasoning_effort="high"','--ignore-user-config','--ephemeral','--skip-git-repo-check','--sandbox','read-only','--json','--color','never','--output-schema',schema,'-'],{cwd:folder,input:prompt,timeout:180000,onEvent:e=>{if(e.type==='turn.completed')usage=e.usage;if(e.type==='turn.failed'||e.type==='error')failed=true;if(e.type==='item.completed'&&e.item?.type==='agent_message')answer=e.item.text;if(e.type==='item.completed'&&['command_execution','file_change','mcp_tool_call','web_search'].includes(e.item?.type)){toolEvents++;onEvent(e.item.type);}}});
     if(result.code!==0||failed||!answer)throw new Error('模型调用未完成');return {answer:JSON.parse(answer),usage,toolEvents};
@@ -69,5 +69,5 @@ async function runRetrieval({execute=infer,outputDir=path.join(__dirname,'runs')
   if(data.retrievalStudy.status==='running')data.retrievalStudy.status='complete';persist();return data;
 }
 function latestRetrieval(){try{return validateDataset(JSON.parse(fs.readFileSync(path.join(__dirname,'runs','retrieval-latest.json'),'utf8')));}catch{return null;}}
-module.exports={fixtures,policies,selectDocuments,buildPrompt,verify,summarize,runRetrieval,latestRetrieval,infer};
+module.exports={fixtures,policies,selectDocuments,buildPrompt,verify,summarize,runRetrieval,latestRetrieval,infer,answerSchema};
 if(require.main===module)runRetrieval().then(d=>console.log(JSON.stringify(d.retrievalStudy.summary,null,2))).catch(e=>{console.error(e.message);process.exitCode=1;});

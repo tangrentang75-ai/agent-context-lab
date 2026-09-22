@@ -37,7 +37,7 @@ function callCosts(calls) {
     knownTokens:costs.reduce((a,b)=>a+(b??0),0), unknownCalls:costs.filter(c=>c===null).length};
 }
 
-async function runPolicy(task, policy, {execute=infer, beforeCall=()=>{}, onCall=()=>{}, onInput=()=>{}}={}) {
+async function runPolicy(task, policy, {execute=infer, beforeCall=()=>{}, onCall=()=>{}, onInput=()=>{}, strictSources=false}={}) {
   const started = Date.now(), elapsed=()=>Math.round((Date.now()-started)/100)/10;
   const events=[], calls=[];
   const event=(type,label,detail)=>events.push({type,atSec:elapsed(),label,detail});
@@ -47,13 +47,13 @@ async function runPolicy(task, policy, {execute=infer, beforeCall=()=>{}, onCall
   add(selectDocuments(task.documents,task.goals,policy==='all'?'all':'coverage'));
   for (let round=1;round<=2;round++) {
     try {beforeCall();} catch(e) {error=e.message;outcome='budget_stopped';stopReason='调用间停止阈值已达到';break;}
-    const prompt=buildPrompt(task,docs);
+    const prompt=buildPrompt(task,docs)+(strictSources?'\nsourceId 只允许使用本轮资料的裸编号：'+docs.map(d=>d.id).join('、')+'；无依据时为 null。不要添加“资料”等前缀。':'');
     const call={round, selectedIds:docs.map(d=>d.id), promptSha256:hash(prompt), usage:null, answer:null, toolEvents:0};
     onInput({round,prompt,selectedIds:call.selectedIds});
     calls.push(call);
     event('act',`第 ${round} 次模型调用`,round===1?'按当前资料恢复配置。':'提交全部资料重新恢复配置；额外调用计入总成本。');
     try {
-      const result=await execute(task,prompt,type=>{call.toolEvents++;event('act','额外模型工具事件',type);});
+      const result=await execute(task,prompt,type=>{call.toolEvents++;event('act','额外模型工具事件',type);},strictSources?{allowedSourceIds:docs.map(d=>d.id)}:{});
       call.answer=result.answer;call.usage=result.usage;call.toolEvents=Math.max(call.toolEvents,result.toolEvents||0);
       answer=result.answer;
       inspection=inspectEvidence(task.goals,answer,docs);call.inspection=inspection;
@@ -88,27 +88,29 @@ function summarize(data) {
       protocolDeviations:runs.filter(r=>r.protocolDeviation).length};
   });
 }
-async function runStudy({execute=infer,outputDir=path.join(__dirname,'runs'),onProgress=console.log,cliVersion,maxCalls=9,maxTokens=180000}={}) {
-  const id='evidence-'+randomUUID(),folder=path.join(outputDir,id);
+async function runStudy({execute=infer,outputDir=path.join(__dirname,'runs'),onProgress=console.log,cliVersion,maxCalls=9,maxTokens=180000,fixtureFile='retrieval-fixtures.json',strictSources=false,studyName='evidence'}={}) {
+  if(!['evidence','validation'].includes(studyName))throw new Error('未知实验名称');
+  const taskSet=JSON.parse(fs.readFileSync(path.join(__dirname,fixtureFile),'utf8'));
+  const id=studyName+'-'+randomUUID(),folder=path.join(outputDir,id);
   fs.mkdirSync(folder,{recursive:true});
-  const schedule=fixtures.tasks.flatMap((t,i)=>[0,1].map(j=>({taskId:t.id,policy:policies[(i+j)%2].id})));
+  const schedule=taskSet.tasks.flatMap((t,i)=>[0,1].map(j=>({taskId:t.id,policy:policies[(i+j)%2].id})));
   const protocol={id,version:1,createdAt:new Date().toISOString(),model:'gpt-6-astra',effort:'high',
-    cliVersion:cliVersion||(await capture(['--version'])).output.trim(),schedule,maxCalls,maxTokens,
-    sourceHashes:Object.fromEntries(['evidence-study.cjs','retrieval-study.cjs','retrieval-fixtures.json','codex-bridge.cjs','evaluation.js'].map(name=>[name,hash(fs.readFileSync(path.join(__dirname,name)))])),
-    design:'同一开发任务集：3 任务 × 2 策略，每格 1 次；每次策略最多 2 次模型调用。非独立验证集。',
+    cliVersion:cliVersion||(await capture(['--version'])).output.trim(),schedule,maxCalls,maxTokens,strictSources,
+    sourceHashes:Object.fromEntries(['evidence-study.cjs','retrieval-study.cjs',fixtureFile,'codex-bridge.cjs','evaluation.js',...(studyName==='validation'?['validation-study.cjs']:[])].map(name=>[name,hash(fs.readFileSync(path.join(__dirname,name)))])),
+    design:taskSet.design||'同一开发任务集：3 任务 × 2 策略，每格 1 次；每次策略最多 2 次模型调用。非独立验证集。',
     stoppingRule:'每次模型调用前检查总调用数、已知累计 token、连续失败数（2 次即停）；失败不重试；调用间阈值非硬计费上限。',
-    limitations:['沿用已观察过失败的开发任务，不能作为独立泛化证据','引文检查仅验证原句存在和数值对应，不能证明语义相关或发现全部冲突','资料由平台选择，非模型自主检索','仅三个人工任务，每格一次；模型服务名非不可变快照','额外模型调用成本全计入；有未知用量时总量保留未知，另列已知部分']};
+    limitations:[taskSet.limitations||'沿用已观察过失败的开发任务，不能作为独立泛化证据','引文检查仅验证原句存在和数值对应，不能证明语义相关或发现全部冲突','资料由平台选择，非模型自主检索','少量人工任务，每格一次；模型服务名非不可变快照','额外模型调用成本全计入；有未知用量时总量保留未知，另列已知部分']};
   for (const name of Object.keys(protocol.sourceHashes)) fs.copyFileSync(path.join(__dirname,name),path.join(folder,name));
   write(path.join(folder,'protocol.json'),protocol);
-  const data={version:1,demo:false,source:'local-evidence-study',retrievalStudy:{protocol,status:'running',summary:[]},tasks:[]};
+  const data={version:1,demo:false,source:studyName==='validation'?'local-validation-study':'local-evidence-study',retrievalStudy:{protocol,status:'running',summary:[]},tasks:[]};
   let callCount=0,knownTokens=0,consecutiveFailures=0,unknownCalls=0;
   const beforeCall=()=>{if(callCount>=maxCalls||knownTokens>=maxTokens||consecutiveFailures>=2)throw new Error('实验达到调用间停止阈值');};
-  const persist=()=>{data.generatedAt=new Date().toISOString();data.retrievalStudy.summary=summarize(data);data.retrievalStudy.cost={modelCalls:callCount,knownTokens,unknownCalls};validateDataset(data);write(path.join(folder,'results.json'),data);write(path.join(outputDir,'evidence-latest.json'),data);};
+  const persist=()=>{data.generatedAt=new Date().toISOString();data.retrievalStudy.summary=summarize(data);data.retrievalStudy.cost={modelCalls:callCount,knownTokens,unknownCalls};validateDataset(data);write(path.join(folder,'results.json'),data);write(path.join(outputDir,studyName+'-latest.json'),data);};
   for (const entry of schedule) {
     try {beforeCall();}catch(e){data.retrievalStudy.status='stopped';data.retrievalStudy.stopReason=e.message;break;}
-    const spec=fixtures.tasks.find(t=>t.id===entry.taskId),runId=randomUUID();
+    const spec=taskSet.tasks.find(t=>t.id===entry.taskId),runId=randomUUID();
     onProgress(`开始：${spec.title} / ${entry.policy}`);
-    const result=await runPolicy(publicTask(spec),entry.policy,{execute,beforeCall,
+    const result=await runPolicy(publicTask(spec),entry.policy,{execute,beforeCall,strictSources,
       onInput:input=>write(path.join(folder,runId+'-'+input.round+'-input.json'),input),
       onCall:call=>{callCount++;const tokens=tokenCount(call.usage);knownTokens+=tokens??0;if(tokens===null)unknownCalls++;consecutiveFailures=call.status==='failed'?consecutiveFailures+1:0;write(path.join(folder,runId+'-'+call.round+'-call.json'),call);}});
     const {documents,...record}=result;

@@ -1,5 +1,7 @@
 # 数据格式 v1 与评价口径
 
+v0.6 的 `local-validation-study` 使用与证据补读相同的逐轮结构，但独立保存到 `validation-latest.json`。协议中的 `strictSources: true` 表示来源字段在调用前被限定为本轮资料 ID 或 null。成本推演导出为 `type: cost-estimate`、`isExperimentResult: false`，包含当前假设、预测和可选的校准来源；它不是任务运行数据，不能作为真实实验导入。
+
 ## 证据补读扩展（v0.5）
 
 `source: local-evidence-study` 使用 `retrievalStudy` 存储预先固定的协议与原始汇总。每条策略运行包含 `calls`（每轮答案、资料 ID、usage、引文检查）、`retrieval.stopReason`、`retrieval.fallbacks` 和 `cost`。`tokens` 为所有调用的输入与输出之和；任一轮用量未知则为 null，已知部分保留在 `cost.knownTokens`。新增结果 `budget_stopped` 表示调用间阈值阻止后续调用，不能当作任务成功。`prematureStops` 是引文检查允许停止、但独立验收未通过的次数；不表示模型内部的置信度。资料数统计唯一文档，两轮重新发送的内容仍计入 token。

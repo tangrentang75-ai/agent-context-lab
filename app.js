@@ -18,9 +18,10 @@ function download(name, payload) {
   link.href = url; link.download = name; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function showReport(payload) {
+  const isCost = payload.type === 'cost-estimate';
   const content=JSON.stringify(payload,null,2);
   const url=URL.createObjectURL(new Blob([content],{type:'application/json'}));
-  $('detail-content').innerHTML=`<header class="dialog-header"><div><p class="eyebrow">EXPORT REPORT</p><h2>评估报告已生成</h2><p>包含当前目标、证据和比较结果；也可以直接复制下方文本保存。</p></div><button id="close-report" class="icon-button" aria-label="关闭报告">×</button></header><p class="muted">${dataset.demo?'人工构造演示数据，不代表真实实验结果。':'导入记录；来源与验收结论需独立复核。'}</p><label for="report-json">JSON 报告内容</label><textarea id="report-json" readonly rows="15" style="display:block;width:100%;margin:10px 0 20px;font-family:monospace">${escapeHTML(content)}</textarea><a id="report-download" class="button primary" download="agent-context-report.json">下载 JSON 文件</a>`;
+  $('detail-content').innerHTML=`<header class="dialog-header"><div><p class="eyebrow">EXPORT REPORT</p><h2>${escapeHTML(isCost ? '成本估算已生成' : '评估报告已生成')}</h2><p>${escapeHTML(isCost ? '包含假设值、估算结果与引用样本；可复制下方文本保存。' : '包含当前目标、证据和比较结果；也可以直接复制下方文本保存。')}</p></div><button id="close-report" class="icon-button" aria-label="关闭报告">×</button></header><p class="muted">${isCost?'成本模型估算，不是新的实验结果。':dataset.demo?'人工构造演示数据，不代表真实实验结果。':'导入记录；来源与验收结论需独立复核。'}</p><label for="report-json">JSON 报告内容</label><textarea id="report-json" readonly rows="15" style="display:block;width:100%;margin:10px 0 20px;font-family:monospace">${escapeHTML(content)}</textarea><a id="report-download" class="button primary" download="${isCost ? 'cost-assumptions.json' : 'agent-context-report.json'}">下载 JSON 文件</a>`;
   $('report-download').href=url;
   $('close-report').addEventListener('click',()=>$('detail-dialog').close());
   $('detail-dialog').addEventListener('close',()=>URL.revokeObjectURL(url),{once:true});
@@ -124,8 +125,8 @@ function showLive(data) {
   if(dataset.source==='local-codex-study')$('connection-status').textContent=`已载入 ${dataset.tasks[0].runs.length} 次对照运行；汇总与逐次证据见下方。`;
 }
 function renderStudy() {
-  const panel=$('study-results');panel.hidden=!(localDataset&&['local-codex-study','local-retrieval-study','local-evidence-study'].includes(dataset.source));if(panel.hidden)return;
-  if(dataset.source==='local-evidence-study'){renderEvidence(panel);return;}
+  const panel=$('study-results');panel.hidden=!(localDataset&&['local-codex-study','local-retrieval-study','local-evidence-study','local-validation-study'].includes(dataset.source));if(panel.hidden)return;
+  if(['local-evidence-study','local-validation-study'].includes(dataset.source)){renderEvidence(panel);return;}
   if(dataset.source==='local-retrieval-study'){renderRetrieval(panel);return;}
   const study=dataset.study,fmt=v=>v===null||v===undefined?'未知':Number(v).toLocaleString('zh-CN',{maximumFractionDigits:1});
   panel.innerHTML=`<p class="eyebrow">真实对照 / ${escapeHTML(study.protocol.requestedModel)} · ${escapeHTML(study.protocol.reasoningEffort)}</p><h2>上下文对照结果</h2><p>${study.status==='complete'?'9 次预定运行已完成':study.status==='running'?'实验正在进行，可再次点击查看以更新':'实验提前停止'} · ${escapeHTML(study.protocol.cliVersion)}${study.stopReason?' · '+escapeHTML(study.stopReason):''}</p><div class="study-table-wrap"><table class="study-table"><thead><tr><th>输入配置</th><th>验收合格 / 尝试</th><th>平均总 token</th><th>token 范围</th><th>平均秒数</th><th>平均缓存输入</th></tr></thead><tbody>${study.summary.map(s=>`<tr><td>${escapeHTML(s.label)}</td><td>${s.successes} / ${s.attempts}</td><td>${fmt(s.tokens.mean)}</td><td>${fmt(s.tokens.min)}—${fmt(s.tokens.max)}</td><td>${fmt(s.durationSec.mean)}</td><td>${fmt(s.cachedInputTokens.mean)}</td></tr>`).join('')}</tbody></table></div><p class="muted">汇总基于原始自动验收；人工复核仅影响下方记录。均值覆盖所有已知成本的尝试，包含失败。未知成本 ${study.summary.reduce((n,s)=>n+s.unknownCost,0)} 条；执行失败 ${study.summary.reduce((n,s)=>n+s.executionFailures,0)} 条；出现额外工具操作 ${study.summary.reduce((n,s)=>n+s.protocolDeviations,0)} 条（已分到独立条件组）。缓存输入包含在总输入内，不重复相加。</p><p><strong>研究边界：</strong>只有一道受限选择题；模型名和推理强度固定，但不是不可变模型快照。额外资料长度不完全相同，缓存与网络也未完全控制。结果不能证明通用节省算力，也不能证明额外探索没有价值。</p><button id="study-report" class="button">导出完整对照记录</button>`;
@@ -144,20 +145,24 @@ function renderEvidence(panel) {
   const runs=dataset.tasks.flatMap(t=>t.runs),total=study.protocol.schedule.length;
   const sourceFormatRuns=runs.filter(run=>Object.values(run.answer||{}).some(field=>typeof field?.sourceId==='string'&&/^资料\s+\d+$/.test(field.sourceId)));
   const outcomeLabel={passed:'合格',insufficient_evidence:'证据不足',verification_failed:'验收未通过',execution_failed:'执行失败',budget_stopped:'额度阈值停止'};
-  panel.innerHTML=`<p class="eyebrow">真实调用 · 开发任务集</p><h2>正文有依据，才考虑停止</h2>
+  panel.innerHTML=`<p class="eyebrow">真实调用 · ${dataset.source==='local-validation-study'?'新编任务检查':'开发任务集'}</p><h2>正文有依据，才考虑停止</h2>
     <p>${runs.length} / ${total} 次策略运行已记录 · ${study.status==='complete'?'本轮完成':study.status==='running'?'仍在进行，可再次点击刷新':'已提前停止'} · ${escapeHTML(study.protocol.model)} / ${escapeHTML(study.protocol.effort)}</p>
     <p>先检查配置值和引文能否对应到已读正文；检查未通过就补读剩余资料。标准答案仅用于策略结束后的独立验收。</p>
     ${sourceFormatRuns.length?`<p class="notice"><strong>来源格式需复核：</strong>本轮 ${sourceFormatRuns.length} 条记录使用了“资料 01”这类写法，严格验收要求“01”。原始结论保留；请查看具体答案，不能把格式差异直接解释为任务理解能力差异。</p>`:''}
     <div class="study-table-wrap"><table class="study-table"><thead><tr><th>策略</th><th>合格 / 尝试</th><th>平均资料数</th><th>模型调用总数</th><th>补读后调用</th><th>平均总 token</th><th>平均秒数</th></tr></thead><tbody>${study.summary.map(row=>`<tr><td>${escapeHTML(row.label)}</td><td>${row.successes} / ${row.attempts}</td><td>${fmt(row.meanFiles)}</td><td>${row.modelCalls}</td><td>${row.fallbacks}</td><td>${fmt(row.meanTokens)}</td><td>${fmt(row.meanSeconds)}</td></tr>`).join('')}</tbody></table></div>
     <h3>每一步的资料和代价</h3><div class="study-table-wrap"><table class="study-table"><thead><tr><th>任务 / 策略</th><th>各次调用</th><th>停止原因</th><th>最终独立验收</th></tr></thead><tbody>${dataset.tasks.flatMap(task=>task.runs.map(run=>`<tr><td><button class="text-button" data-evidence-task="${escapeHTML(task.id)}">${escapeHTML(task.title)}</button><br>${escapeHTML(run.strategy)}</td><td>${run.calls.map(call=>`第 ${call.round} 次：资料 ${escapeHTML(call.selectedIds.join('、'))}<br>${fmt(call.usage&&Number.isFinite(call.usage.input_tokens)&&Number.isFinite(call.usage.output_tokens)?call.usage.input_tokens+call.usage.output_tokens:null)} tokens`).join('<br><br>')}</td><td>${escapeHTML(run.retrieval.stopReason)}${run.error?'<br>'+escapeHTML(run.error):''}</td><td>${escapeHTML(outcomeLabel[run.outcome]||'未知')}</td></tr>`)).join('')}</tbody></table></div>
     <p class="muted">已知累计 ${fmt(study.cost.knownTokens)} tokens；用量未知 ${study.cost.unknownCalls} 次调用。两轮输入和输出均计入，缓存输入不重复相加。误停 ${study.summary.reduce((n,row)=>n+row.prematureStops,0)} 次（检查通过后最终验收仍未完成）。汇总保留原始自动验收；下方人工复核不改写它。</p>
-    <p><strong>当前边界：</strong>沿用上一轮的三个开发任务，每格一次，尚未做独立验证。引文真实和数值匹配不代表语义正确，也不能保证没有冲突；这一步只修补可识别的证据缺失。</p>
+    <p><strong>当前边界：</strong>${escapeHTML(study.protocol.design)} ${escapeHTML(study.protocol.limitations[0])} 引文真实和数值匹配不代表语义正确，也不能保证没有冲突；这一步只修补可识别的证据缺失。</p>
     <button id="evidence-export" class="button">导出完整补读实验记录</button>`;
   panel.querySelectorAll('[data-evidence-task]').forEach(button=>button.addEventListener('click',()=>{selectTask(button.dataset.evidenceTask);$('compare-content').scrollIntoView({behavior:'smooth',block:'start'});}));
   $('evidence-export').addEventListener('click',()=>showReport(dataset));
 }
 $('load-evidence').addEventListener('click',async()=>{
   try{const response=await fetch('/api/evidence'),data=await response.json();if(!response.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent=`已载入 ${data.tasks.length} 个任务的证据补读实验；调用与成本见下表。`;$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}
+  catch(e){toast(e.message||'请启动本机服务后查看',true);}
+});
+$('load-validation').addEventListener('click',async()=>{
+  try{const response=await fetch('/api/validation'),data=await response.json();if(!response.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent='已载入新编任务的检查结果；来源编号使用预先约束的格式。';$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}
   catch(e){toast(e.message||'请启动本机服务后查看',true);}
 });
 async function checkConnection() {
