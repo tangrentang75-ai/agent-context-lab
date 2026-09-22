@@ -48,7 +48,7 @@ async function runPolicy(task, policy, {execute=infer, beforeCall=()=>{}, onCall
   for (let round=1;round<=2;round++) {
     try {beforeCall();} catch(e) {error=e.message;outcome='budget_stopped';stopReason='调用间停止阈值已达到';break;}
     const prompt=buildPrompt(task,docs)+(strictSources?'\nsourceId 只允许使用本轮资料的裸编号：'+docs.map(d=>d.id).join('、')+'；无依据时为 null。不要添加“资料”等前缀。':'');
-    const call={round, selectedIds:docs.map(d=>d.id), promptSha256:hash(prompt), usage:null, answer:null, toolEvents:0};
+    const call={round, selectedIds:docs.map(d=>d.id), promptSha256:hash(prompt), promptChars:prompt.length, documentChars:docs.reduce((n,d)=>n+d.text.length,0), usage:null, answer:null, toolEvents:0};
     onInput({round,prompt,selectedIds:call.selectedIds});
     calls.push(call);
     event('act',`第 ${round} 次模型调用`,round===1?'按当前资料恢复配置。':'提交全部资料重新恢复配置；额外调用计入总成本。');
@@ -88,21 +88,24 @@ function summarize(data) {
       protocolDeviations:runs.filter(r=>r.protocolDeviation).length};
   });
 }
-async function runStudy({execute=infer,outputDir=path.join(__dirname,'runs'),onProgress=console.log,cliVersion,maxCalls=9,maxTokens=180000,fixtureFile='retrieval-fixtures.json',strictSources=false,studyName='evidence'}={}) {
-  if(!['evidence','validation'].includes(studyName))throw new Error('未知实验名称');
-  const taskSet=JSON.parse(fs.readFileSync(path.join(__dirname,fixtureFile),'utf8'));
+async function runStudy({execute=infer,outputDir=path.join(__dirname,'runs'),onProgress=console.log,cliVersion,maxCalls=9,maxTokens=180000,fixtureFile='retrieval-fixtures.json',strictSources=false,studyName='evidence',taskSet:providedTaskSet,extraSourceFiles=[]}={}) {
+  if(!['evidence','validation','scaling'].includes(studyName))throw new Error('未知实验名称');
+  const taskSet=providedTaskSet||JSON.parse(fs.readFileSync(path.join(__dirname,fixtureFile),'utf8'));
   const id=studyName+'-'+randomUUID(),folder=path.join(outputDir,id);
   fs.mkdirSync(folder,{recursive:true});
   const schedule=taskSet.tasks.flatMap((t,i)=>[0,1].map(j=>({taskId:t.id,policy:policies[(i+j)%2].id})));
   const protocol={id,version:1,createdAt:new Date().toISOString(),model:'gpt-6-astra',effort:'high',
     cliVersion:cliVersion||(await capture(['--version'])).output.trim(),schedule,maxCalls,maxTokens,strictSources,
-    sourceHashes:Object.fromEntries(['evidence-study.cjs','retrieval-study.cjs',fixtureFile,'codex-bridge.cjs','evaluation.js',...(studyName==='validation'?['validation-study.cjs']:[])].map(name=>[name,hash(fs.readFileSync(path.join(__dirname,name)))])),
+    fixtureSha256:hash(JSON.stringify(taskSet)),
+    conditions:taskSet.tasks.map(t=>({taskId:t.id,...t.condition})),
+    sourceHashes:Object.fromEntries(['evidence-study.cjs','retrieval-study.cjs',...(providedTaskSet?[]:[fixtureFile]),'codex-bridge.cjs','evaluation.js',...(studyName==='validation'?['validation-study.cjs']:[]),...extraSourceFiles].map(name=>[name,hash(fs.readFileSync(path.join(__dirname,name)))])),
     design:taskSet.design||'同一开发任务集：3 任务 × 2 策略，每格 1 次；每次策略最多 2 次模型调用。非独立验证集。',
     stoppingRule:'每次模型调用前检查总调用数、已知累计 token、连续失败数（2 次即停）；失败不重试；调用间阈值非硬计费上限。',
     limitations:[taskSet.limitations||'沿用已观察过失败的开发任务，不能作为独立泛化证据','引文检查仅验证原句存在和数值对应，不能证明语义相关或发现全部冲突','资料由平台选择，非模型自主检索','少量人工任务，每格一次；模型服务名非不可变快照','额外模型调用成本全计入；有未知用量时总量保留未知，另列已知部分']};
   for (const name of Object.keys(protocol.sourceHashes)) fs.copyFileSync(path.join(__dirname,name),path.join(folder,name));
+  write(path.join(folder,'fixture-set.json'),taskSet);
   write(path.join(folder,'protocol.json'),protocol);
-  const data={version:1,demo:false,source:studyName==='validation'?'local-validation-study':'local-evidence-study',retrievalStudy:{protocol,status:'running',summary:[]},tasks:[]};
+  const data={version:1,demo:false,source:'local-'+studyName+'-study',retrievalStudy:{protocol,status:'running',summary:[]},tasks:[]};
   let callCount=0,knownTokens=0,consecutiveFailures=0,unknownCalls=0;
   const beforeCall=()=>{if(callCount>=maxCalls||knownTokens>=maxTokens||consecutiveFailures>=2)throw new Error('实验达到调用间停止阈值');};
   const persist=()=>{data.generatedAt=new Date().toISOString();data.retrievalStudy.summary=summarize(data);data.retrievalStudy.cost={modelCalls:callCount,knownTokens,unknownCalls};validateDataset(data);write(path.join(folder,'results.json'),data);write(path.join(outputDir,studyName+'-latest.json'),data);};
@@ -120,7 +123,7 @@ async function runStudy({execute=infer,outputDir=path.join(__dirname,'runs'),onP
     record.events.push({type:'verify',atSec:record.durationSec,label:'控制器停止后，独立核对标准答案',detail:`${Object.values(checks).filter(c=>c.status==='pass').length}/${spec.goals.length} 项通过；标准答案不参与停止决策。`});
     const run={...record,id:runId,strategy:policies.find(p=>p.id===entry.policy).label,policy:entry.policy,model:'gpt-6-astra / high（请求配置）',comparisonGroup:id+'-'+spec.id+(result.protocolDeviation?'-tool-deviation':''),checks,outcome};
     let task=data.tasks.find(t=>t.id===spec.id);
-    if(!task){task={id:spec.id,title:spec.title,description:spec.description,scenario:'coding',goals:spec.goals.map(({id,label})=>({id,label,weight:5,required:true})),runs:[]};data.tasks.push(task);}
+    if(!task){task={id:spec.id,title:spec.title+(spec.condition?` · ${spec.condition.charsPerDocument} 字符/份 · ${spec.condition.labelError?'标签错误':'标签正确'}`:''),description:spec.description,scenario:'coding',goals:spec.goals.map(({id,label})=>({id,label,weight:5,required:true})),runs:[]};data.tasks.push(task);}
     task.runs.push(run);persist();onProgress(`完成：${outcome}，${run.tokens??'未知'} tokens，${run.calls.length} 次调用`);
     if(outcome==='budget_stopped'){data.retrievalStudy.status='stopped';data.retrievalStudy.stopReason=result.error;break;}
   }

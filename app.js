@@ -125,7 +125,8 @@ function showLive(data) {
   if(dataset.source==='local-codex-study')$('connection-status').textContent=`已载入 ${dataset.tasks[0].runs.length} 次对照运行；汇总与逐次证据见下方。`;
 }
 function renderStudy() {
-  const panel=$('study-results');panel.hidden=!(localDataset&&['local-codex-study','local-retrieval-study','local-evidence-study','local-validation-study'].includes(dataset.source));if(panel.hidden)return;
+  const panel=$('study-results');panel.hidden=!(localDataset&&['local-codex-study','local-retrieval-study','local-evidence-study','local-validation-study','local-scaling-study'].includes(dataset.source));if(panel.hidden)return;
+  if(dataset.source==='local-scaling-study'){renderEvidence(panel);renderScaling(panel);return;}
   if(['local-evidence-study','local-validation-study'].includes(dataset.source)){renderEvidence(panel);return;}
   if(dataset.source==='local-retrieval-study'){renderRetrieval(panel);return;}
   const study=dataset.study,fmt=v=>v===null||v===undefined?'未知':Number(v).toLocaleString('zh-CN',{maximumFractionDigits:1});
@@ -145,7 +146,7 @@ function renderEvidence(panel) {
   const runs=dataset.tasks.flatMap(t=>t.runs),total=study.protocol.schedule.length;
   const sourceFormatRuns=runs.filter(run=>Object.values(run.answer||{}).some(field=>typeof field?.sourceId==='string'&&/^资料\s+\d+$/.test(field.sourceId)));
   const outcomeLabel={passed:'合格',insufficient_evidence:'证据不足',verification_failed:'验收未通过',execution_failed:'执行失败',budget_stopped:'额度阈值停止'};
-  panel.innerHTML=`<p class="eyebrow">真实调用 · ${dataset.source==='local-validation-study'?'新编任务检查':'开发任务集'}</p><h2>正文有依据，才考虑停止</h2>
+  panel.innerHTML=`<p class="eyebrow">真实调用 · ${dataset.source==='local-scaling-study'?'长度与标签对照':dataset.source==='local-validation-study'?'新编任务检查':'开发任务集'}</p><h2>正文有依据，才考虑停止</h2>
     <p>${runs.length} / ${total} 次策略运行已记录 · ${study.status==='complete'?'本轮完成':study.status==='running'?'仍在进行，可再次点击刷新':'已提前停止'} · ${escapeHTML(study.protocol.model)} / ${escapeHTML(study.protocol.effort)}</p>
     <p>先检查配置值和引文能否对应到已读正文；检查未通过就补读剩余资料。标准答案仅用于策略结束后的独立验收。</p>
     ${sourceFormatRuns.length?`<p class="notice"><strong>来源格式需复核：</strong>本轮 ${sourceFormatRuns.length} 条记录使用了“资料 01”这类写法，严格验收要求“01”。原始结论保留；请查看具体答案，不能把格式差异直接解释为任务理解能力差异。</p>`:''}
@@ -163,6 +164,22 @@ $('load-evidence').addEventListener('click',async()=>{
 });
 $('load-validation').addEventListener('click',async()=>{
   try{const response=await fetch('/api/validation'),data=await response.json();if(!response.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent='已载入新编任务的检查结果；来源编号使用预先约束的格式。';$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}
+  catch(e){toast(e.message||'请启动本机服务后查看',true);}
+});
+function renderScaling(panel){
+  const fmt=v=>v==null?'未知':Number(v).toLocaleString('zh-CN',{maximumFractionDigits:1});
+  const label={passed:'合格',insufficient_evidence:'证据不足',verification_failed:'未通过',execution_failed:'执行失败',budget_stopped:'阈值停止'};
+  const rows=(dataset.retrievalStudy.protocol.conditions||[]).map(c=>{
+    const runs=dataset.tasks.find(t=>t.id===c.taskId)?.runs||[],a=runs.find(r=>r.policy==='all'),b=runs.find(r=>r.policy==='evidence');
+    const valid=r=>r&&r.outcome==='passed'&&!r.protocolDeviation&&Number.isFinite(r.tokens);
+    const saving=valid(a)&&valid(b)?a.tokens-b.tokens:null;
+    const cell=r=>r?`${escapeHTML(label[r.outcome]||'未知')} · ${fmt(r.tokens)} tokens · ${r.calls.length} 次调用`:'尚未运行';
+    return `<tr><td>${fmt(c.charsPerDocument)} 字符/份</td><td>${c.labelError?'标签错误':'标签正确'}</td><td>${cell(a)}</td><td>${cell(b)}</td><td>${saving===null?'未满足比较条件':saving>=0?'少用 '+fmt(saving):'多用 '+fmt(-saving)}</td></tr>`;
+  }).join('');
+  panel.insertAdjacentHTML('afterbegin',`<section aria-label="按实验条件比较"><h2>同一任务，分条件比较</h2><p>每份正文的长度固定，六份资料；同长度下正文相同，仅改变标签。差值为全读总 token 减去补读策略总 token，仅在两者验收通过、用量已知且无额外工具事件时显示。</p><div class="study-table-wrap"><table class="study-table"><thead><tr><th>资料长度</th><th>目录状态</th><th>一次全读</th><th>按需补读</th><th>按需补读的 token 差值</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted">人工背景填充、同一道题、每格一次；不估计自然遗漏概率，不支持泛化结论。下方跨条件均值仅描述本次设计，不代表实际工作负载。</p></section>`);
+}
+$('load-scaling').addEventListener('click',async()=>{
+  try{const response=await fetch('/api/scaling'),data=await response.json();if(!response.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent='已载入长度与标签对照；请按条件分别查看，勿将设置比例当作自然概率。';$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}
   catch(e){toast(e.message||'请启动本机服务后查看',true);}
 });
 async function checkConnection() {

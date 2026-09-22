@@ -51,6 +51,10 @@ v0.6 的 `local-validation-study` 使用与证据补读相同的逐轮结构，�
 
 可选目标未通过不直接阻止推荐，但仍显示在得分与证据中。不同模型 token 不等于等价硬件成本。条件组由提供者声明，平台无法独立核实模型、版本、输入和环境是否可比。
 
+## 长度与标签实验扩展
+
+v0.7 的 `local-scaling-study` 沿用逐轮结构，独立保存到 `scaling-latest.json`。`retrievalStudy.protocol.conditions` 保存任务 ID、每份字符数、标签状态与资料份数；`fixtureSha256` 对应规范化 `JSON.stringify` 后的资料集合。完整资料快照另存 `fixture-set.json`。每次调用新增 `promptChars` 和 `documentChars`，用于描述文本规模，不当作 token 计数。展示成本差值时必须两策略均通过、成本已知且没有额外工具事件。人为安排的错误标签占比不作为补读概率。
+
 ## 保存与导出
 
 评估报告包含当前任务、该任务运行记录、当前目标配置、预算和比较结果。它不是输入数据集；重新导入时，将报告的 task 放到带 version、demo 和 tasks 数组的数据集中。
