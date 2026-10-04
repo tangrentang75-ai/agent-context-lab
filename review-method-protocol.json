@@ -1,0 +1,38 @@
+{
+  "method": "lexical-review-v1",
+  "frozenAt": "2026-10-04T07:30:39.356Z",
+  "status": "implementation_frozen_before_independent_evaluation",
+  "sourceHashes": {
+    "review-planner.js": "be63490f5803da199811701e1e3a471e239a6ca99f7986372e1e419cdf6e4e4e",
+    "review-strategy.cjs": "093193501b7d9bd94a03737c07fb75fca41d6faa39df9aa11a062b88e62a031a",
+    "review-planner.test.cjs": "ed5d45a88809aecdce04a6f2610db17d330b7e2eb5205caa25f74862df62be55",
+    "retrieval-study.cjs": "928f4531401c65af6a81cbb274f9e90dd1aea4975ff9695d7fe8d175d48e017c",
+    "quality-study.cjs": "93a8d9ffa4dcb2a9f2d0b94f5974f27ef0a7d4e94eb622fd00c62d63076953cc",
+    "evidence-study.cjs": "69409fe89adfc02b38a86d8eee8dcae2614234461eff01282f867e4caba8ac02",
+    "codex-bridge.cjs": "dcc2477c72a60f1c797e0ff72f5a2e2ef37613c75487575468e6700015a9c833",
+    "codex-response.cjs": "912f8b6478cbbbc3e7285473a0a6c78c1087086517a8f5c0dacb7e56b65f6dc6",
+    "jsonl-reader.cjs": "8bb32e9825b932179e9e74c3f9c66cdbf30ad2a16b3f8cae2ea3bcf37e7ac307"
+  },
+  "defaults": {
+    "scanCharBudget": 20000,
+    "contextCharBudget": 10000
+  },
+  "modelCallsPerStrategy": 1,
+  "completionRule": "Any omitted document requires review; all provided documents only permit independent verification.",
+  "evaluationStatus": "Not run; development fixtures and mock executor tests only.",
+  "requiredBaselines": [
+    "all",
+    "evidence"
+  ],
+  "requiredMetrics": [
+    "response quality",
+    "automatic completion fraction",
+    "correct abstention",
+    "premature stops",
+    "scanned characters",
+    "submitted characters",
+    "controller time",
+    "all model token usage"
+  ],
+  "budgetNote": "UTF-16 characters are not tokens; per-call checks are not a hard billing cap."
+}

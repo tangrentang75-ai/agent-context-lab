@@ -8,7 +8,7 @@ const {latestEvidence} = require('./evidence-study.cjs');
 const {latestValidation} = require('./validation-study.cjs');
 const {latestScaling} = require('./scaling-study.cjs');
 const {latestQuality} = require('./quality-study.cjs');
-const allowed = {'/':'index.html','/index.html':'index.html','/styles.css':'styles.css','/app.js':'app.js','/evaluation.js':'evaluation.js','/sample-data.js':'sample-data.js','/cost-model.js':'cost-model.js','/cost-ui.js':'cost-ui.js'};
+const allowed = {'/':'index.html','/index.html':'index.html','/styles.css':'styles.css','/app.js':'app.js','/evaluation.js':'evaluation.js','/sample-data.js':'sample-data.js','/cost-model.js':'cost-model.js','/cost-ui.js':'cost-ui.js','/review.html':'review.html','/review-planner.js':'review-planner.js','/review-ui.js':'review-ui.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
 const port = Number(process.env.PORT || 4173);
 function createServer(executor=bridge) {

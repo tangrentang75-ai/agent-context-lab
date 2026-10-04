@@ -2,7 +2,7 @@
 
 **以用户目标为起点，复核 AI 任务的验收证据、执行过程与资源投入。**
 
-大学生创新创业训练计划候选项目。当前 v0.8.1 提供网页评估、本机 Codex 执行连接、上下文与检索实验、证据补读、成本推演、长度对照及质量反例审计，并补充调用状态诊断。内置演示数据仍为人工构造；真实记录单独显示。尚无通用性能提升结论。
+大学生创新创业训练计划候选项目。当前 v0.9 提供网页评估、本机 Codex 执行连接、上下文与检索实验、证据补读、成本推演、长度对照、质量反例审计及停止前核验预览。内置演示数据仍为人工构造；真实记录单独显示。尚无通用性能提升结论。
 
 ## 扩展后的课题定位
 
@@ -41,6 +41,8 @@ v0.8.1 修正事件流判定与中文分块解析，增加安全诊断；45 项�
 
 2026-10-04 随后完成独立质量协议：6 次策略运行、8 次真实调用，合计 117,956 tokens。全读 3/3 满足响应约定，补读策略 2/3，隐藏冲突导致一次误停；补读策略总用量还高出 66.2%。三个人工反例不足以估计普遍错误率。详见 [质量反例实测报告](quality-results-report.md)。
 
+v0.9 新增“打开停止前核验”：编辑资料、设定扫描与正文提交预算，查看词语匹配、不同数字线索和未覆盖文档。纯本地预览不调用模型；部分上下文只能生成待核验候选。51 项测试通过，尚未做新策略真实效果评估。方法与边界见 [停止前核验说明](review-method.md)。
+
 ## 运行
 
 v0.6 新增“打开成本推演”，比较一次全读与可能补读的期望 token，可填入上轮实测成本或手动调整假设；它不调用模型，也不预测质量。另有两个新编任务、5 次真实调用的迁移检查，运行前约束来源编号格式，两策略均通过，补读策略平均 token 高约 49.3%。详见 [成本推演与新任务报告](cost-validation-report.md)。
@@ -65,7 +67,7 @@ npm start
 npm test
 ```
 
-或 `node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs`。测试本身不会调用模型。
+或 `node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs review-planner.test.cjs`。测试本身不会调用模型。
 
 单次连接诊断：`node connection-probe.cjs` 或 `npm run probe`，每次仅调用一次模型并使用额度，不自动重试；输入、协议、源码和结果独立保存在 `runs/probe-*/`。它不属于质量策略对照。
 

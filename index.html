@@ -17,7 +17,7 @@
       <a href="#compare" data-view="compare"><span>⇄</span>策略比较</a>
       <a href="#research" data-view="research"><span>⌁</span>课题与路线</a>
     </nav>
-    <div class="sidebar-note"><span class="small-dot"></span>本地评估工作台<p>从“做了多少”<br>走向“完成了什么”。</p><small>v0.8.1 · 质量反例审计</small></div>
+    <div class="sidebar-note"><span class="small-dot"></span>本地评估工作台<p>从“做了多少”<br>走向“完成了什么”。</p><small>v0.9 · 停止前核验预览</small></div>
     <div class="sidebar-footer"><span class="avatar">研</span><div>大创研究空间<small>目标驱动 · 证据可查</small></div></div>
   </aside>
   <main id="main">
@@ -26,6 +26,7 @@
       <section class="page-heading"><div><p class="eyebrow">HUMAN GOALS, MEASURABLE OUTCOMES</p><h1 id="page-title">让 AI 的投入，对准你的目标。</h1><p id="page-subtitle">把目标、执行与验收放在一起，理解每一次任务的取舍。</p></div><div class="header-actions"><button id="template-button" class="button">下载示例</button><button id="import-button" class="button primary">＋ 导入记录</button><input id="file-input" type="file" accept=".json,application/json" hidden></div></section>
       <div id="notice" class="notice" role="status"></div>
       <section class="panel study-entry"><div><p class="eyebrow">COST EXPLORER</p><h2>少读一点，真的更省吗？</h2><p>调节补读概率和每次调用成本，找出两种方式的用量持平点。只做估算，不发起模型调用。</p></div><button id="open-cost" class="button primary">打开成本推演</button></section>
+      <section class="panel study-entry"><div><p class="eyebrow">COVERAGE REVIEW</p><h2>找到依据之后，还漏了什么？</h2><p>在字符预算内筛选候选证据，查看可能冲突与未覆盖资料。纯本地规划，不调用模型。</p></div><a class="button primary" href="review.html">打开停止前核验</a></section>
       <section id="cost-lab" class="panel" hidden>
         <h2>什么时候值得先少读？</h2><p>假设两种方式能达到同样的验收质量。这里仅比较 token；不会据此自动改变执行策略。</p>
         <form id="cost-form" class="cost-fields"><label for="cost-full">一次全读的总 token<input id="cost-full" type="number" min="0" max="1000000000" step="any" value="15000"></label><label for="cost-first">先少读的首次 token<input id="cost-first" type="number" min="0" max="1000000000" step="any" value="14800"></label><label for="cost-second">发生补读时，第二次的 token<input id="cost-second" type="number" min="0" max="1000000000" step="any" value="15000"></label><label for="cost-probability">需要第二次调用的概率（%）<input id="cost-probability" type="number" min="0" max="100" step="any" value="33.3333333333"></label></form>
