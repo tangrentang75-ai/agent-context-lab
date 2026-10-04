@@ -33,6 +33,7 @@ function notice() {
     ? '<span class="notice-icon">i</span><div><strong>当前为人工构造的演示数据</strong><span>下方记录用于体验交互。可点击“运行真实测试”获取实际模型记录。</span></div><span class="tag">DEMO</span>'
     : localDataset ? '<span class="notice-icon">✓</span><div><strong>当前显示本机 Codex 真实执行记录</strong><span>逐项独立验收；用量来自执行器。原始结果保存在本机，人工复核修改需导出留存。少量任务不代表普遍提升。</span></div><span class="tag">LIVE</span>'
     : '<span class="notice-icon">i</span><div><strong>当前为你导入的记录</strong><span>数据仅在当前页面内存中处理；来源与验收证据需自行复核。刷新会恢复示例，请导出保存。</span></div><span class="tag">IMPORTED</span>';
+  if(dataset.source==='local-quality-study')$('notice').insertAdjacentHTML('beforeend','<p><strong>本组按安全响应约定验收：</strong>冲突或缺失资料时，正确留空可以通过；通过不表示配置已经恢复。与旧实验的配置完成率分开理解。</p>');
 }
 function renderOverview() {
   const all = dataset.tasks.flatMap(t => t.runs.map(r => ({run:r, result:E.evaluate(t,r)})));
@@ -125,7 +126,8 @@ function showLive(data) {
   if(dataset.source==='local-codex-study')$('connection-status').textContent=`已载入 ${dataset.tasks[0].runs.length} 次对照运行；汇总与逐次证据见下方。`;
 }
 function renderStudy() {
-  const panel=$('study-results');panel.hidden=!(localDataset&&['local-codex-study','local-retrieval-study','local-evidence-study','local-validation-study','local-scaling-study'].includes(dataset.source));if(panel.hidden)return;
+  const panel=$('study-results');panel.hidden=!(localDataset&&['local-codex-study','local-retrieval-study','local-evidence-study','local-validation-study','local-scaling-study','local-quality-study'].includes(dataset.source));if(panel.hidden)return;
+  if(dataset.source==='local-quality-study'){renderEvidence(panel);renderQuality(panel);return;}
   if(dataset.source==='local-scaling-study'){renderEvidence(panel);renderScaling(panel);return;}
   if(['local-evidence-study','local-validation-study'].includes(dataset.source)){renderEvidence(panel);return;}
   if(dataset.source==='local-retrieval-study'){renderRetrieval(panel);return;}
@@ -146,7 +148,7 @@ function renderEvidence(panel) {
   const runs=dataset.tasks.flatMap(t=>t.runs),total=study.protocol.schedule.length;
   const sourceFormatRuns=runs.filter(run=>Object.values(run.answer||{}).some(field=>typeof field?.sourceId==='string'&&/^资料\s+\d+$/.test(field.sourceId)));
   const outcomeLabel={passed:'合格',insufficient_evidence:'证据不足',verification_failed:'验收未通过',execution_failed:'执行失败',budget_stopped:'额度阈值停止'};
-  panel.innerHTML=`<p class="eyebrow">真实调用 · ${dataset.source==='local-scaling-study'?'长度与标签对照':dataset.source==='local-validation-study'?'新编任务检查':'开发任务集'}</p><h2>正文有依据，才考虑停止</h2>
+  panel.innerHTML=`<p class="eyebrow">真实调用 · ${dataset.source==='local-quality-study'?'质量反例审计':dataset.source==='local-scaling-study'?'长度与标签对照':dataset.source==='local-validation-study'?'新编任务检查':'开发任务集'}</p><h2>${dataset.source==='local-quality-study'?'引文检查与最终响应验收':'正文有依据，才考虑停止'}</h2>
     <p>${runs.length} / ${total} 次策略运行已记录 · ${study.status==='complete'?'本轮完成':study.status==='running'?'仍在进行，可再次点击刷新':'已提前停止'} · ${escapeHTML(study.protocol.model)} / ${escapeHTML(study.protocol.effort)}</p>
     <p>先检查配置值和引文能否对应到已读正文；检查未通过就补读剩余资料。标准答案仅用于策略结束后的独立验收。</p>
     ${sourceFormatRuns.length?`<p class="notice"><strong>来源格式需复核：</strong>本轮 ${sourceFormatRuns.length} 条记录使用了“资料 01”这类写法，严格验收要求“01”。原始结论保留；请查看具体答案，不能把格式差异直接解释为任务理解能力差异。</p>`:''}
@@ -164,6 +166,25 @@ $('load-evidence').addEventListener('click',async()=>{
 });
 $('load-validation').addEventListener('click',async()=>{
   try{const response=await fetch('/api/validation'),data=await response.json();if(!response.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent='已载入新编任务的检查结果；来源编号使用预先约束的格式。';$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}
+  catch(e){toast(e.message||'请启动本机服务后查看',true);}
+});
+function renderQuality(panel){
+  const names={correct_answer:'正确恢复配置',correct_abstention:'按约定留空（未恢复配置）',unnecessary_abstention:'可回答却留空',unsupported_assertion:'应留空但未遵守约定',incorrect_answer:'答案或引用不正确',unassessed:'尚未判定'};
+  const studies=dataset.retrievalStudy,checks=dataset.tasks.flatMap(t=>t.runs.flatMap(r=>Object.values(r.checks)));
+  const count=judgment=>checks.filter(c=>c.judgment===judgment).length;
+  const cases=studies.protocol.auditCases||[];
+  const rows=studies.protocol.schedule.map(entry=>{
+    const t=dataset.tasks.find(t=>t.id===entry.taskId),r=t?.runs.find(r=>r.policy===entry.policy),audit=cases.find(c=>c.taskId===entry.taskId);
+    const premature=r&&r.policy==='evidence'&&r.retrieval.stopReason==='引文完整性检查通过'&&r.outcome!=='passed';
+    const unavailable=!r||['execution_failed','budget_stopped'].includes(r.outcome);
+    const state=unavailable?'未评估':r.policy==='all'?'不适用（全读）':premature?'发现误停':'本次未发现误停';
+    const response=!r?'尚未运行':unavailable?'执行未完成，无法判定':Object.values(r.checks).map(c=>names[c.judgment]||'尚未判定').join('；');
+    return `<tr><td>${escapeHTML(audit?.kind||entry.taskId)}</td><td>${escapeHTML(audit?.expectedResponse||'未定义')}</td><td>${entry.policy==='all'?'一次读取全部资料':'检查引文，不足时补读'}</td><td>${escapeHTML(response)}</td><td>${state}</td><td>${r?number(r.tokens)+' tokens / '+r.calls.length+' 次':'尚未运行'}</td></tr>`;
+  }).join('');
+  panel.insertAdjacentHTML('afterbegin',`<section aria-label="安全响应审计"><h2>能回答时准确回答，依据不足时留空</h2><p>${escapeHTML(studies.protocol.verificationContract)}</p><p>字段级原始验收：正确恢复 ${count('correct_answer')} 项；按约定留空 ${count('correct_abstention')} 项；应留空但未遵守约定 ${count('unsupported_assertion')} 项；可回答却留空 ${count('unnecessary_abstention')} 项；答案或引用不正确 ${count('incorrect_answer')} 项；尚未判定 ${checks.filter(c=>c.status==='unknown').length} 项。</p><div class="study-table-wrap"><table class="study-table"><thead><tr><th>反例</th><th>完整资料要求</th><th>策略</th><th>实际响应判定</th><th>停止审计</th><th>总用量</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted">误停指引文检查通过后停止，但最终响应未达到本题约定。完整资料金标准只在停止后使用；控制器尚未具备通用语义相关性或冲突检测能力。每格一次的开发反例不代表真实错误率。</p></section>`);
+}
+$('load-quality').addEventListener('click',async()=>{
+  try{const response=await fetch('/api/quality'),data=await response.json();if(!response.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent='已载入质量反例；正确留空只表示响应符合约定，不表示配置恢复完成。';$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}
   catch(e){toast(e.message||'请启动本机服务后查看',true);}
 });
 function renderScaling(panel){

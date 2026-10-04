@@ -55,6 +55,10 @@ v0.6 的 `local-validation-study` 使用与证据补读相同的逐轮结构，�
 
 v0.7 的 `local-scaling-study` 沿用逐轮结构，独立保存到 `scaling-latest.json`。`retrievalStudy.protocol.conditions` 保存任务 ID、每份字符数、标签状态与资料份数；`fixtureSha256` 对应规范化 `JSON.stringify` 后的资料集合。完整资料快照另存 `fixture-set.json`。每次调用新增 `promptChars` 和 `documentChars`，用于描述文本规模，不当作 token 计数。展示成本差值时必须两策略均通过、成本已知且没有额外工具事件。人为安排的错误标签占比不作为补读概率。
 
+## 质量审计扩展
+
+v0.8 的 `local-quality-study` 独立保存为 `quality-latest.json`。协议包含 `verificationContract`、`promptSuffix`、`auditCases`，用于追溯评分约定、完整提示词及反例目标；只有停止后的验收器使用金标准。`checks` 增加 `judgment`：`correct_answer`、`correct_abstention`、`unnecessary_abstention`、`unsupported_assertion`、`incorrect_answer` 或 `unassessed`。执行失败仍保留 `status: unknown`，可能没有 `judgment`。正确留空可按本组约定判为 pass，但不表示配置已恢复；缺少答案或仅部分留空不能算正确留空。不得将该组通过率与旧组配置恢复率直接比较。
+
 ## 保存与导出
 
 评估报告包含当前任务、该任务运行记录、当前目标配置、预算和比较结果。它不是输入数据集；重新导入时，将报告的 task 放到带 version、demo 和 tasks 数组的数据集中。

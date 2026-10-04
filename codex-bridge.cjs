@@ -5,6 +5,8 @@ const os = require('node:os');
 const {spawn} = require('node:child_process');
 const {randomUUID} = require('node:crypto');
 const {validateDataset} = require('./evaluation.js');
+const {jsonlReader} = require('./jsonl-reader.cjs');
+const {responseTracker} = require('./codex-response.cjs');
 const storage = path.join(__dirname, 'runs');
 const prompt = `这是一次固定的代码修复接入测试。只根据下面的题目回答，不使用工具，不读取任何文件，不修改文件。输出符合给定 JSON Schema 的答案。
 报名规则：同一个用户不能重复报名同一活动；可以报名其他活动；活动报名人数达到容量后拒绝报名；未满且无重复时允许。
@@ -26,15 +28,18 @@ function findCodex() {
 function capture(args, {cwd=__dirname, input, timeout=15000, onEvent}={}) {
   return new Promise((resolve,reject)=>{
     const child=spawn(findCodex(),args,{cwd,windowsHide:true,shell:false,stdio:['pipe','pipe','pipe']});
-    let output='', errors='', pending='', timedOut=false;
+    let output='', errors='', timedOut=false, eventError=false;
+    const reader=jsonlReader(event=>{
+      if(eventError)return;
+      try{onEvent?.(event);}catch{eventError=true;child.kill();}
+    });
     const timer=setTimeout(()=>{timedOut=true;child.kill();},timeout);
     child.on('error',()=>{clearTimeout(timer);reject(new Error('无法启动 Codex。请安装并登录，或设置 CODEX_BIN。'));});
     child.stdout.on('data',chunk=>{
-      const text=chunk.toString(); output=(output+text).slice(-2*1024*1024);pending+=text;
-      let i;while((i=pending.indexOf('\n'))>=0){const line=pending.slice(0,i);pending=pending.slice(i+1);try{onEvent?.(JSON.parse(line));}catch {}}
+      output=(output+chunk.toString()).slice(-2*1024*1024);reader.push(chunk);
     });
     child.stderr.on('data',chunk=>{errors=(errors+chunk.toString()).slice(-16000);});
-    child.on('close',code=>{clearTimeout(timer);if(timedOut)reject(new Error('运行超过 3 分钟，已停止本次 Codex 进程；未生成成功记录。'));else resolve({code,output,errors});});
+    child.on('close',code=>{clearTimeout(timer);reader.end();if(eventError)reject(new Error('事件处理失败，本次调用未生成成功记录。'));else if(timedOut)reject(new Error(`运行超过 ${timeout/1000} 秒，已停止本次 Codex 进程；未生成成功记录。`));else resolve({code,output,errors});});
     child.stdin.on('error',()=>{});child.stdin.end(input || '');
   });
 }
@@ -71,19 +76,16 @@ async function runExperiment(options={}) {
   const schemaPath=path.join(work,'answer.schema.json');fs.writeFileSync(schemaPath,JSON.stringify(schema));
   const started=Date.now(), events=[{type:'act',atSec:0,label:'提交固定修复任务',detail:'真实调用本机已登录的 Codex；受限代码修复题，答案只允许选择预定义修复操作。'}];
   const elapsed=()=>Math.round((Date.now()-started)/100)/10;
-  let usage=null, answer=null, failed=false;
+  let usage=null;
+  const tracker=responseTracker(type=>events.push({type:'explore',atSec:elapsed(),label:'观察到工具事件',detail:`类型：${type}；为避免泄露本机数据，不保存参数及输出。`}));
   try {
     const fixed=options.model?['--model',options.model,'-c',`model_reasoning_effort="${options.effort||'high'}"`]:[];
     const result=await capture(['exec',...fixed,'--ignore-user-config','--ephemeral','--skip-git-repo-check','--sandbox','read-only','--color','never','--json','--output-schema',schemaPath,'-'],{cwd:work,input:options.prompt||prompt,timeout:180000,onEvent:e=>{
-      if(e.type==='turn.completed')usage=e.usage;
-      if(e.type==='turn.failed'||e.type==='error')failed=true;
-      if(e.type==='item.completed'&&e.item?.type==='agent_message')answer=e.item.text;
-      if(e.type==='item.completed'&&['command_execution','mcp_tool_call','web_search','file_change'].includes(e.item?.type))events.push({type:'explore',atSec:elapsed(),label:'观察到工具事件',detail:`类型：${e.item.type}；为避免泄露本机数据，不保存参数及输出。`});
+      tracker.accept(e);
       // Reasoning events are deliberately neither retained nor shown.
     }});
-    if(result.code!==0||failed)throw new Error('Codex 运行未完成。请检查本机登录状态、网络和可用额度后重试。');
-    if(!answer)throw new Error('未收到模型最终答案，不能生成成功记录');
-    const patch=JSON.parse(answer);const verification=verifyPatch(patch);
+    const response=tracker.finish(result);usage=response.usage;
+    const patch=response.answer;const verification=verifyPatch(patch);
     events.push({type:'act',atSec:elapsed(),label:'收到模型修复选择',detail:`重复校验：${patch.duplicateScope}；容量比较：${patch.capacityOperator}。${patch.explanation}`.slice(0,3000)});
     const passed=verification.results.filter(r=>r.actual===r.expected).length;
     events.push({type:'verify',atSec:elapsed(),label:'独立验收完成',detail:`固定测试 ${passed}/${verification.results.length} 通过。验收由平台本地规则执行，不采用模型自评。`});
@@ -92,10 +94,11 @@ async function runExperiment(options={}) {
     const id=randomUUID();
     const data=validateDataset({version:1,demo:false,source:'local-codex',generatedAt:new Date().toISOString(),tasks:[{id:'real-signup-smoke-v1',scenario:'coding',title:'真实测试：修复活动报名判断',description:'真实 Codex 调用，受限修复题；模型选择修复操作，平台在可信函数上运行 8 条测试。仅验证接入与验收链路，不等于复杂仓库修复或节省算力的证据。',goals:[{id:'capacity',label:'满员与零容量拒绝报名',weight:5,required:true},{id:'duplicate',label:'阻止同一活动重复报名',weight:5,required:true},{id:'regression',label:'跨活动与正常报名不受影响',weight:4,required:true}],runs:[{id,strategy:'Codex 默认配置 · 单次接入测试',model:'Codex CLI 默认模型（事件未提供精确型号）',comparisonGroup:`smoke-v1-${id}`,tokens,durationSec:elapsed(),checks:verification.checks,events,usage:usage||null,patch,verification:verification.results,settings:{ignoreUserConfig:true,sandbox:'read-only',promptVersion:1,modelPinned:false},limitations:['单次受限修复题，不代表真实仓库修复能力','模型未固定，当前记录不用于跨次策略比较','token 是 CLI 报告的输入加输出；缓存输入不重复相加；非硬件算力或账单价格']}]}]});
     const run=data.tasks[0].runs[0];
+    run.diagnostics=response.diagnostics;
     if(options.model){run.model=`${options.model} / ${options.effort||'high'}（请求配置；非不可变版本）`;run.settings={...run.settings,modelPinned:true,requestedModel:options.model,reasoningEffort:options.effort||'high'};run.limitations=run.limitations.filter(x=>!x.startsWith('模型未固定'));}
     if(options.persist!==false){fs.writeFileSync(path.join(storage,`${id}.json`),JSON.stringify(data,null,2));fs.writeFileSync(path.join(storage,'latest.json'),JSON.stringify(data,null,2));}
     return data;
-  } catch(error) {error.observed={usage,durationSec:elapsed(),events};throw error;
+  } catch(error) {error.diagnostics=error.diagnostics||{...tracker.diagnostics(),reason:'capture_failed'};error.observed={usage:usage||tracker.usage,durationSec:elapsed(),events,diagnostics:error.diagnostics};throw error;
   } finally {const target=path.resolve(work),root=path.resolve(os.tmpdir());if(path.dirname(target)===root&&path.basename(target).startsWith('agent-context-smoke-'))fs.rmSync(target,{recursive:true,force:true});}
 }
 function latest(){try{return validateDataset(JSON.parse(fs.readFileSync(path.join(storage,'latest.json'),'utf8')));}catch{return null;}}

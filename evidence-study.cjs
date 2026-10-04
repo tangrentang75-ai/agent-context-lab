@@ -37,7 +37,7 @@ function callCosts(calls) {
     knownTokens:costs.reduce((a,b)=>a+(b??0),0), unknownCalls:costs.filter(c=>c===null).length};
 }
 
-async function runPolicy(task, policy, {execute=infer, beforeCall=()=>{}, onCall=()=>{}, onInput=()=>{}, strictSources=false}={}) {
+async function runPolicy(task, policy, {execute=infer, beforeCall=()=>{}, onCall=()=>{}, onInput=()=>{}, strictSources=false, promptSuffix=''}={}) {
   const started = Date.now(), elapsed=()=>Math.round((Date.now()-started)/100)/10;
   const events=[], calls=[];
   const event=(type,label,detail)=>events.push({type,atSec:elapsed(),label,detail});
@@ -47,7 +47,7 @@ async function runPolicy(task, policy, {execute=infer, beforeCall=()=>{}, onCall
   add(selectDocuments(task.documents,task.goals,policy==='all'?'all':'coverage'));
   for (let round=1;round<=2;round++) {
     try {beforeCall();} catch(e) {error=e.message;outcome='budget_stopped';stopReason='调用间停止阈值已达到';break;}
-    const prompt=buildPrompt(task,docs)+(strictSources?'\nsourceId 只允许使用本轮资料的裸编号：'+docs.map(d=>d.id).join('、')+'；无依据时为 null。不要添加“资料”等前缀。':'');
+    const prompt=buildPrompt(task,docs)+(strictSources?'\nsourceId 只允许使用本轮资料的裸编号：'+docs.map(d=>d.id).join('、')+'；无依据时为 null。不要添加“资料”等前缀。':'')+(promptSuffix?'\n'+promptSuffix:'');
     const call={round, selectedIds:docs.map(d=>d.id), promptSha256:hash(prompt), promptChars:prompt.length, documentChars:docs.reduce((n,d)=>n+d.text.length,0), usage:null, answer:null, toolEvents:0};
     onInput({round,prompt,selectedIds:call.selectedIds});
     calls.push(call);
@@ -55,11 +55,13 @@ async function runPolicy(task, policy, {execute=infer, beforeCall=()=>{}, onCall
     try {
       const result=await execute(task,prompt,type=>{call.toolEvents++;event('act','额外模型工具事件',type);},strictSources?{allowedSourceIds:docs.map(d=>d.id)}:{});
       call.answer=result.answer;call.usage=result.usage;call.toolEvents=Math.max(call.toolEvents,result.toolEvents||0);
+      if(result.diagnostics)call.diagnostics=result.diagnostics;
       answer=result.answer;
       inspection=inspectEvidence(task.goals,answer,docs);call.inspection=inspection;
       call.status='complete';
     } catch(e) {
       call.status='failed';call.error=e.message;call.usage=e.usage||null;error=e.message;outcome='execution_failed';
+      if(e.diagnostics)call.diagnostics=e.diagnostics;
     }
     onCall(call);
     if (outcome==='execution_failed') {stopReason='执行失败，不自动重试';break;}
@@ -88,17 +90,19 @@ function summarize(data) {
       protocolDeviations:runs.filter(r=>r.protocolDeviation).length};
   });
 }
-async function runStudy({execute=infer,outputDir=path.join(__dirname,'runs'),onProgress=console.log,cliVersion,maxCalls=9,maxTokens=180000,fixtureFile='retrieval-fixtures.json',strictSources=false,studyName='evidence',taskSet:providedTaskSet,extraSourceFiles=[]}={}) {
-  if(!['evidence','validation','scaling'].includes(studyName))throw new Error('未知实验名称');
+async function runStudy({execute=infer,outputDir=path.join(__dirname,'runs'),onProgress=console.log,cliVersion,maxCalls=9,maxTokens=180000,fixtureFile='retrieval-fixtures.json',strictSources=false,studyName='evidence',taskSet:providedTaskSet,extraSourceFiles=[],promptSuffix='',finalVerifier=verify}={}) {
+  if(!['evidence','validation','scaling','quality'].includes(studyName))throw new Error('未知实验名称');
   const taskSet=providedTaskSet||JSON.parse(fs.readFileSync(path.join(__dirname,fixtureFile),'utf8'));
   const id=studyName+'-'+randomUUID(),folder=path.join(outputDir,id);
   fs.mkdirSync(folder,{recursive:true});
   const schedule=taskSet.tasks.flatMap((t,i)=>[0,1].map(j=>({taskId:t.id,policy:policies[(i+j)%2].id})));
   const protocol={id,version:1,createdAt:new Date().toISOString(),model:'gpt-6-astra',effort:'high',
-    cliVersion:cliVersion||(await capture(['--version'])).output.trim(),schedule,maxCalls,maxTokens,strictSources,
+    cliVersion:cliVersion||(await capture(['--version'])).output.trim(),schedule,maxCalls,maxTokens,strictSources,promptSuffix,
+    verificationContract:taskSet.verificationContract||'恢复配置值并引用正确来源原句；缺少依据不算完成。',
+    auditCases:taskSet.tasks.filter(t=>t.audit).map(t=>({taskId:t.id,...t.audit})),
     fixtureSha256:hash(JSON.stringify(taskSet)),
     conditions:taskSet.tasks.map(t=>({taskId:t.id,...t.condition})),
-    sourceHashes:Object.fromEntries(['evidence-study.cjs','retrieval-study.cjs',...(providedTaskSet?[]:[fixtureFile]),'codex-bridge.cjs','evaluation.js',...(studyName==='validation'?['validation-study.cjs']:[]),...extraSourceFiles].map(name=>[name,hash(fs.readFileSync(path.join(__dirname,name)))])),
+    sourceHashes:Object.fromEntries(['evidence-study.cjs','retrieval-study.cjs',...(providedTaskSet?[]:[fixtureFile]),'codex-bridge.cjs','codex-response.cjs','jsonl-reader.cjs','evaluation.js',...(studyName==='validation'?['validation-study.cjs']:[]),...extraSourceFiles].map(name=>[name,hash(fs.readFileSync(path.join(__dirname,name)))])),
     design:taskSet.design||'同一开发任务集：3 任务 × 2 策略，每格 1 次；每次策略最多 2 次模型调用。非独立验证集。',
     stoppingRule:'每次模型调用前检查总调用数、已知累计 token、连续失败数（2 次即停）；失败不重试；调用间阈值非硬计费上限。',
     limitations:[taskSet.limitations||'沿用已观察过失败的开发任务，不能作为独立泛化证据','引文检查仅验证原句存在和数值对应，不能证明语义相关或发现全部冲突','资料由平台选择，非模型自主检索','少量人工任务，每格一次；模型服务名非不可变快照','额外模型调用成本全计入；有未知用量时总量保留未知，另列已知部分']};
@@ -113,12 +117,12 @@ async function runStudy({execute=infer,outputDir=path.join(__dirname,'runs'),onP
     try {beforeCall();}catch(e){data.retrievalStudy.status='stopped';data.retrievalStudy.stopReason=e.message;break;}
     const spec=taskSet.tasks.find(t=>t.id===entry.taskId),runId=randomUUID();
     onProgress(`开始：${spec.title} / ${entry.policy}`);
-    const result=await runPolicy(publicTask(spec),entry.policy,{execute,beforeCall,strictSources,
+    const result=await runPolicy(publicTask(spec),entry.policy,{execute,beforeCall,strictSources,promptSuffix,
       onInput:input=>write(path.join(folder,runId+'-'+input.round+'-input.json'),input),
       onCall:call=>{callCount++;const tokens=tokenCount(call.usage);knownTokens+=tokens??0;if(tokens===null)unknownCalls++;consecutiveFailures=call.status==='failed'?consecutiveFailures+1:0;write(path.join(folder,runId+'-'+call.round+'-call.json'),call);}});
     const {documents,...record}=result;
     // Gold answers are used only here, after the controller has already stopped.
-    const checks=result.outcome?Object.fromEntries(spec.goals.map(g=>[g.id,{status:'unknown',evidence:result.error||'执行未完成'}])):verify(spec,result.answer,documents);
+    const checks=result.outcome?Object.fromEntries(spec.goals.map(g=>[g.id,{status:'unknown',evidence:result.error||'执行未完成'}])):finalVerifier(spec,result.answer,documents);
     const outcome=result.outcome||(Object.values(checks).every(c=>c.status==='pass')?'passed':Object.values(checks).some(c=>c.status==='fail')?'verification_failed':'insufficient_evidence');
     record.events.push({type:'verify',atSec:record.durationSec,label:'控制器停止后，独立核对标准答案',detail:`${Object.values(checks).filter(c=>c.status==='pass').length}/${spec.goals.length} 项通过；标准答案不参与停止决策。`});
     const run={...record,id:runId,strategy:policies.find(p=>p.id===entry.policy).label,policy:entry.policy,model:'gpt-6-astra / high（请求配置）',comparisonGroup:id+'-'+spec.id+(result.protocolDeviation?'-tool-deviation':''),checks,outcome};

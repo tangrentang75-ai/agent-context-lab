@@ -2,7 +2,7 @@
 
 **以用户目标为起点，复核 AI 任务的验收证据、执行过程与资源投入。**
 
-大学生创新创业训练计划候选项目。当前 v0.7 提供网页评估、本机 Codex 执行连接、上下文与检索实验、证据补读、成本推演及资料长度与标签状态对照。内置演示数据仍为人工构造；真实记录单独显示。尚无通用性能提升结论。
+大学生创新创业训练计划候选项目。当前 v0.8.1 提供网页评估、本机 Codex 执行连接、上下文与检索实验、证据补读、成本推演、长度对照及质量反例审计，并补充调用状态诊断。内置演示数据仍为人工构造；真实记录单独显示。尚无通用性能提升结论。
 
 ## 扩展后的课题定位
 
@@ -35,6 +35,10 @@ v0.5 增加受限的在线补读控制器：检查已读正文中的引用与数
 
 v0.7 增加长度与标签对照：同一题的每份正文扩展至 128 / 4096 字符，各设标签正确和错误两种条件，再比较两种策略。10 次真实调用完成 8 次策略运行，均通过；长资料标签正确时少用 8,413 tokens，错误且补读时多用 23,177 tokens。网页按条件展示结果；这不是自然遗漏概率或泛化验证。详见 [长度与标签报告](scaling-study-report.md)。
 
+v0.8 增加无关真引文、隐藏冲突和资料缺失三类反例；区分正确恢复配置、按约定留空与误停。38 项自动测试通过；真实实验连续两次执行失败后停止，已知用量 29,482 tokens，未得到可用质量结论。详见 [质量审计与失败记录](quality-study-report.md)。
+
+v0.8.1 修正事件流判定与中文分块解析，增加安全诊断；45 项自动测试通过。一次独立真实连接探测通过答案验收，用量 14,601 tokens。它没有重跑或改判旧质量实验，也不能证明策略更优。详见 [连接诊断记录](connection-diagnostics-report.md)。
+
 ## 运行
 
 v0.6 新增“打开成本推演”，比较一次全读与可能补读的期望 token，可填入上轮实测成本或手动调整假设；它不调用模型，也不预测质量。另有两个新编任务、5 次真实调用的迁移检查，运行前约束来源编号格式，两策略均通过，补读策略平均 token 高约 49.3%。详见 [成本推演与新任务报告](cost-validation-report.md)。
@@ -59,7 +63,9 @@ npm start
 npm test
 ```
 
-或 `node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs`。测试本身不会调用模型。
+或 `node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs`。测试本身不会调用模型。
+
+单次连接诊断：`node connection-probe.cjs` 或 `npm run probe`，每次仅调用一次模型并使用额度，不自动重试；输入、协议、源码和结果独立保存在 `runs/probe-*/`。它不属于质量策略对照。
 
 上下文对照运行：`node context-study.cjs` 或 `npm run study`。最多 9 次；连续两次执行失败或已报告累计用量达到 180,000 tokens 后停止后续调用，不自动重试。停止阈值是调用间检查，非硬性计费上限。它不会修改原来的单次测试结果；完成后在网页点击“查看上下文对照”。
 
@@ -72,6 +78,8 @@ npm test
 测试覆盖质量门槛、缺失证据、缺失成本、预算限制、条件组隔离、无效导入和并列结果。浏览器还应检查导入、预算交互、人工复核与报告导出。
 
 长度与标签对照：`node scaling-study.cjs` 或 `npm run scaling`；最多 12 次调用、260,000 已知累计 tokens 的调用间阈值，连续两次执行失败停止。生成的完整资料、条件和源码哈希在调用前保存。网页点击“查看长度与标签对照”；结果独立保存，不覆盖旧实验。
+
+质量反例运行：`node quality-study.cjs` 或 `npm run quality`；最多 9 次调用、150,000 已知累计 tokens 的调用间阈值，连续两次执行失败停止。页面点击“查看质量反例审计”。本组通过率包含按约定留空，不能当作配置恢复率；当前真实记录为提前停止状态。
 
 ## 使用和数据边界
 

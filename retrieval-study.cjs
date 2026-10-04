@@ -34,10 +34,12 @@ function verify(task,answer,docs){
 }
 async function infer(task,prompt,onEvent,{allowedSourceIds}={}){
   const folder=fs.mkdtempSync(path.join(os.tmpdir(),'acl-retrieval-'));const schema=path.join(folder,'answer.json');fs.writeFileSync(schema,JSON.stringify(answerSchema(task,allowedSourceIds)));
-  let answer,usage=null,failed=false,toolEvents=0;
-  try{const result=await capture(['exec','--model','gpt-6-astra','-c','model_reasoning_effort="high"','--ignore-user-config','--ephemeral','--skip-git-repo-check','--sandbox','read-only','--json','--color','never','--output-schema',schema,'-'],{cwd:folder,input:prompt,timeout:180000,onEvent:e=>{if(e.type==='turn.completed')usage=e.usage;if(e.type==='turn.failed'||e.type==='error')failed=true;if(e.type==='item.completed'&&e.item?.type==='agent_message')answer=e.item.text;if(e.type==='item.completed'&&['command_execution','file_change','mcp_tool_call','web_search'].includes(e.item?.type)){toolEvents++;onEvent(e.item.type);}}});
-    if(result.code!==0||failed||!answer)throw new Error('模型调用未完成');return {answer:JSON.parse(answer),usage,toolEvents};
-  }catch(e){e.usage=usage;throw e;}finally{const target=path.resolve(folder);if(path.dirname(target)===path.resolve(os.tmpdir())&&path.basename(target).startsWith('acl-retrieval-'))fs.rmSync(target,{recursive:true,force:true});}
+  const tracker=require('./codex-response.cjs').responseTracker(onEvent);
+  try{
+    const result=await capture(['exec','--model','gpt-6-astra','-c','model_reasoning_effort="high"','--ignore-user-config','--ephemeral','--skip-git-repo-check','--sandbox','read-only','--json','--color','never','--output-schema',schema,'-'],{cwd:folder,input:prompt,timeout:180000,onEvent:tracker.accept});
+    return tracker.finish(result);
+  }catch(e){e.usage=e.usage||tracker.usage;e.diagnostics=e.diagnostics||{...tracker.diagnostics(),reason:'capture_failed'};throw e;}
+  finally{const target=path.resolve(folder);if(path.dirname(target)===path.resolve(os.tmpdir())&&path.basename(target).startsWith('acl-retrieval-'))fs.rmSync(target,{recursive:true,force:true});}
 }
 const avg=a=>{const v=a.filter(Number.isFinite);return v.length?v.reduce((n,x)=>n+x,0)/v.length:null;};
 function summarize(data){return policies.map(p=>{const runs=data.tasks.flatMap(t=>t.runs).filter(r=>r.policy===p.id);return {id:p.id,label:p.label,attempts:runs.length,successes:runs.filter(r=>r.outcome==='passed').length,meanTokens:avg(runs.map(r=>r.tokens)),meanSeconds:avg(runs.map(r=>r.durationSec)),meanFiles:avg(runs.map(r=>r.retrieval.selectedIds.length)),unknownCosts:runs.filter(r=>r.tokens===null).length,executionFailures:runs.filter(r=>r.outcome==='execution_failed').length,protocolDeviations:runs.filter(r=>r.protocolDeviation).length};});}

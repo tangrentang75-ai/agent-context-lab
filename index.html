@@ -17,7 +17,7 @@
       <a href="#compare" data-view="compare"><span>⇄</span>策略比较</a>
       <a href="#research" data-view="research"><span>⌁</span>课题与路线</a>
     </nav>
-    <div class="sidebar-note"><span class="small-dot"></span>本地评估工作台<p>从“做了多少”<br>走向“完成了什么”。</p><small>v0.7 · 长度与标签对照</small></div>
+    <div class="sidebar-note"><span class="small-dot"></span>本地评估工作台<p>从“做了多少”<br>走向“完成了什么”。</p><small>v0.8.1 · 质量反例审计</small></div>
     <div class="sidebar-footer"><span class="avatar">研</span><div>大创研究空间<small>目标驱动 · 证据可查</small></div></div>
   </aside>
   <main id="main">
@@ -33,6 +33,7 @@
         <p id="cost-origin" class="muted">手动假设，尚未引用实测记录。</p><div id="cost-result" aria-live="polite"></div>
         <p class="muted">补读概率需要独立样本估计，不能用成功率替代。少量数据算出的持平点仅供研究设计参考，不是已经验证的调度规则。</p>
       </section>
+      <section class="panel study-entry"><div><p class="eyebrow">QUALITY AUDIT</p><h2>有真实引文，就能放心停止吗？</h2><p>检查无关引文、规则冲突与资料缺失。分别记录正确回答、按约定留空和过早停止；留空不表示已经恢复配置。</p></div><button id="load-quality" class="button primary">查看质量反例审计</button></section>
       <section class="panel study-entry"><div><p class="eyebrow">LENGTH & LABELS</p><h2>资料变长后，还值得补读吗？</h2><p>同一任务比较短、长资料与两种标签状态。按条件查看验收和总 token，不把人为设置的错误比例当作实际概率。</p></div><button id="load-scaling" class="button primary">查看长度与标签对照</button></section>
       <section class="panel study-entry"><div><p class="eyebrow">NEW TASK CHECK</p><h2>换一组任务，结果怎样？</h2><p>两项新编校园服务任务，来源编号在运行前限定格式。与旧结果分开记录，检查补读行为和总成本。</p></div><button id="load-validation" class="button">查看新任务检查</button></section>
       <section class="panel study-entry"><div><p class="eyebrow">CONTEXT EXPERIMENT</p><h2>更多上下文，带来了什么？</h2><p>同一道题、三种输入、每组 3 次。查看独立验收和完整用量，先观察，再下结论。</p></div><button id="load-study" class="button">查看上下文对照</button></section>
