@@ -2,11 +2,13 @@
 
 **以用户目标为起点，复核 AI 任务的验收证据、执行过程与资源投入。**
 
-大学生创新创业训练计划候选项目。当前 v0.11 提供网页评估、本机 Codex 执行连接、上下文与检索实验、证据补读、成本推演、长度对照、质量反例审计及停止前核验和对照实测。内置演示数据仍为人工构造；真实记录单独显示。尚无通用性能提升结论。
+大学生创新创业训练计划候选项目。当前 v0.12 提供网页评估、本机 Codex 执行连接、上下文与检索实验、证据补读、成本推演、长度对照、质量反例审计及停止前核验和对照实测。内置演示数据仍为人工构造；真实记录单独显示。尚无通用性能提升结论。
 
 v0.10 整理工作台界面：任务概览优先显示当前数据集的任务、用量和验收分布；八个研究入口集中到“实验中心”，读取结果后进入策略比较。统一导航、表单、证据详情和停止前核验页，并支持窄屏布局。验收分布来自当前记录，示例状态明确标注。设计参考与检查范围见 [界面升级说明](ui-design.md)。
 
 v0.11 新增原文片段 v2 开发预览：同预算切换整篇/片段选择，追踪原文位置、部分提交和省略范围；适配器默认在部分正文时停止，不消耗候选调用。66 项测试通过；六个已见任务的离线重放仍存在关键句遗漏，没有 v2 真实答案或用量结论。原 v1 冻结方法与实测保留，详见 [片段方法与开发重放](review-passages-method.md)。
+
+v0.12 准备冻结后的新任务试点：六类新编题中预先选择两类，四种配置各重复两次，16 个配置格、最多 12 次调用。普通命令和网页检查不运行模型；真实启动须明确加 `--run`。双重哈希校验、模型可见引文评分、失败/未知费用停止、分重复结果页已实现，76 项测试通过。本轮没有新增真实调用，详见 [执行前计划](passage-study-plan.md)。
 
 ## 扩展后的课题定位
 
@@ -73,7 +75,7 @@ npm start
 npm test
 ```
 
-或 `node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs review-planner.test.cjs review-study.test.cjs review-passages.test.cjs`。测试本身不会调用模型。
+或 `node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs review-planner.test.cjs review-study.test.cjs review-passages.test.cjs passage-study.test.cjs`。测试本身不会调用模型。
 
 覆盖核验试点：`node review-study.cjs` 或 `npm run review-study`。启动前校验冻结方法哈希，最多 10 次调用、160,000 已知累计 tokens 的调用间阈值，连续两次失败停止。六类题中仅预定前两类进入本试点；其他四类未运行。从“打开停止前核验”进入页面后点击“查看真实对照记录”只读取已有结果，不调用模型。
 

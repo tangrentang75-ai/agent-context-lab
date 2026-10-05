@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "preparedAt": "2026-10-05T08:52:34.097Z",
+  "status": "prepared_not_executed",
+  "sourceHashes": {
+    "passage-study-design.json": "7cfdb216ac3687335aa19564bb97344c0c6096bc6786184bb65a5089715331d1",
+    "passage-study-fixtures.json": "47648451c1bfe18cad122151643b7ff016af8a4949c3bca5ea9037e72c30e099",
+    "passage-study.cjs": "4702e919d6e00412744b6e107c032bbeb798583bbbe28d276b1ee57bd3a82c30",
+    "passage-study.test.cjs": "91445d4f262da9ecc537ff984f175ef8de2cfffd47beffa6e354a022a27a4963",
+    "review-study.cjs": "f6ed3f262e0ebc5b930da770395c6ddd5adb89ed0d04241c453da91783bf75ff",
+    "review-passages-protocol.json": "c858d0bc7dbaa3f2dd7a9bf879a2fc4e0248d02d0babba5a95b13d64ebf4c664",
+    "review-method-protocol.json": "d08dbe6407fa1f398f5fe5c9913dbe77ca25fba8e1b6ad68aebd43c70714bd8f"
+  }
+}

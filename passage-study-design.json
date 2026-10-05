@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "method": "lexical-passages-v2",
+  "phase": "prospective_pilot_not_executed",
+  "pilotTaskIds": ["telemetry-dual-policy", "export-boundary-policy"],
+  "selectionRule": "在运行前指定首两类：分散的两个正常字段、同数值但边界相反的规定；其余四类预留。不得按预览结果重选试点。",
+  "repeats": 2,
+  "strategies": [
+    {"id":"all","label":"一次全读","method":"v1","budget":"full"},
+    {"id":"v1-half","label":"整篇 v1 · 半量","method":"v1","budget":"half"},
+    {"id":"v2-stop","label":"片段 v2 · 调用前停止","method":"v2","budget":"half","allowPartialCandidate":false},
+    {"id":"v2-candidate","label":"片段 v2 · 候选诊断","method":"v2","budget":"half","allowPartialCandidate":true}
+  ],
+  "maxCalls": 12,
+  "maxKnownTokens": 190000,
+  "maxConsecutiveFailures": 2,
+  "stopOnUnknownUsage": true,
+  "scheduleRule": "按重复轮次、任务顺序运行；每个任务轮次对四配置循环移位，偏移=(轮次索引*试点任务数+任务索引)%配置数。每配置最多一次调用，不补读、不重试。",
+  "budgetRule": "扫描预算等于完整正文长度；half 为总正文 UTF-16 长度除以二向下取整，full 为总长。不计提示词、来源标记或执行器开销。用量阈值仅在调用间检查，不是硬计费上限。",
+  "primaryMetrics": ["候选通过/已评分", "自动完成/已尝试", "错误放行次数", "调用前跳过次数", "待核验/已尝试", "已知与未知用量", "每个重复的配对结果"],
+  "humanReviewRule": "needs_review 只标记需要人工核验；没有用户参加，不推算人工耗时或真实工作量。未来人工成本另外测量。",
+  "comparisonLimits": "all 使用冻结 v1 的完整正文路径以减少基线提示差异；v2 候选仍附带部分原文提示及省略标记。比较完整实现，不能声称仅停止规则或检索规则的因果效应。",
+  "modelRequest": "gpt-6-astra",
+  "reasoningEffort": "high",
+  "scopeLimit": "两个任务、每配置两次仅用于接入和评分试点，不估计普遍错误率；同开发者在方法冻结后编题，不是外部盲测。"
+}
