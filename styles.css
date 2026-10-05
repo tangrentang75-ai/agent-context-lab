@@ -41,3 +41,5 @@ dialog{border-radius:12px;box-shadow:0 20px 80px #1d1d3528;padding:26px}dialog::
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 body[data-view=experiments] #notice,body[data-view=research] #notice,body[data-view=experiments] .header-actions,body[data-view=research] .header-actions{display:none}.notice a{color:#6e62ad;text-decoration:underline;text-underline-offset:2px;margin:0 3px}
 .review-page button{color:#fff}.review-page button.secondary{color:#696179}
+
+.review-page select{display:block;width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;min-width:0}.review-page blockquote{white-space:pre-wrap}
