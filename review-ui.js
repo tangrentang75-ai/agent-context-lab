@@ -10,16 +10,17 @@ el('reset').addEventListener('click',reset);
 el('plan').addEventListener('click',()=>{
   invalidate();try{
     if(!el('scan-budget').value.trim()||!el('context-budget').value.trim())throw new Error('请填写两个预算，允许填 0');
-    const task=JSON.parse(el('task-input').value),options={scanCharBudget:Number(el('scan-budget').value),contextCharBudget:Number(el('context-budget').value)},isPassages=el('review-method').value==='passages';
-    const plan=isPassages?ReviewPassages.planPassages(task,options):ReviewPlanner.planReview(task,options);
+    const task=JSON.parse(el('task-input').value),options={scanCharBudget:Number(el('scan-budget').value),contextCharBudget:Number(el('context-budget').value)},isBundles=el('review-method').value==='bundles',isPassages=isBundles||el('review-method').value==='passages';
+    const plan=isBundles?ReviewBundles.planBundles(task,options):isPassages?ReviewPassages.planPassages(task,options):ReviewPlanner.planReview(task,options);
     report={type:'local-review-plan',demo:el('task-input').value===JSON.stringify(example,null,2),generatedAt:new Date().toISOString(),task,plan};
     const box=el('summary');text('p',plan.disposition==='needs_review'?'仍需核验：部分资料未提交，候选答案不能标为完成。':'全部提供资料可进入模型上下文；仍须独立验收答案。',box).className='status'+(plan.disposition==='needs_review'?'':' complete');
-    const dl=document.createElement('dl');box.append(dl);for(const [k,v] of [['规划方法',isPassages?'原文片段 v2 · 开发预览':'完整文档 v1 · 已冻结'],['扫描字符',`${plan.scannedChars} / ${plan.totalChars}`],['拟提交字符',plan.submittedChars],['本地扫描耗时',plan.controllerMs.toFixed(2)+' ms'],['模型调用','0 次'],['未扫描资料',plan.unscannedIds.join('、')||'无'],['完全未提交资料',plan.omittedIds.join('、')||'无'],...(isPassages?[['部分提交资料',plan.partialIds.join('、')||'无'],['调用建议',plan.callRecommendation==='skip_incomplete'?'调用前停止：先补足预算或人工核验':'可进入独立验收流程']]:[])]){text('dt',k,dl);text('dd',String(v),dl);}
+    const dl=document.createElement('dl');box.append(dl);for(const [k,v] of [['规划方法',isBundles?'约束证据组 v3 · 已冻结':isPassages?'原文片段 v2 · 开发预览':'完整文档 v1 · 已冻结'],['扫描字符',`${plan.scannedChars} / ${plan.totalChars}`],['拟提交字符',plan.submittedChars],['本地扫描耗时',plan.controllerMs.toFixed(2)+' ms'],['模型调用','0 次'],['未扫描资料',plan.unscannedIds.join('、')||'无'],['完全未提交资料',plan.omittedIds.join('、')||'无'],...(isPassages?[['部分提交资料',plan.partialIds.join('、')||'无'],['调用建议',plan.callRecommendation==='skip_incomplete'?'调用前停止：先补足预算或人工核验':'可进入独立验收流程']]:[])]){text('dt',k,dl);text('dd',String(v),dl);}
     const evidence=el('evidence');evidence.hidden=false;evidence.replaceChildren();text('h2','候选证据与核验线索',evidence);
     text('p','拟提交资料：'+(plan.selectedIds.join('、')||'无')+'。排序使用目标词语匹配，不依赖目录标签或标准答案。',evidence);
     if(isPassages){
+      if(isBundles){text('h3','整体保留的证据组',evidence);for(const b of plan.bundles)text('p',`资料 ${b.sourceId}：${b.chars} 字符 · ${b.selected?'拟提交':'预算内未提交'}。${b.reason}`,evidence);text('p',`尚有 ${plan.unsubmittedCues.length} 条带规则线索的原句未提交；线索不是语义验收。`,evidence).className='status';}
       const old=ReviewPlanner.planReview(task,options);
-      text('h3','同预算下的选择',evidence);text('p',`旧版整篇：${old.submittedChars} 字符，来源 ${old.selectedIds.join('、')||'无'}；新版片段：${plan.submittedChars} 字符，来源 ${plan.selectedIds.join('、')||'无'}。这只是上下文选择，不是答案质量或 token 效果对照。`,evidence);
+      text('h3','同预算下的选择',evidence);text('p',`旧版整篇：${old.submittedChars} 字符，来源 ${old.selectedIds.join('、')||'无'}；${isBundles?'证据组 v3':'片段 v2'}：${plan.submittedChars} 字符，来源 ${plan.selectedIds.join('、')||'无'}。这只是上下文选择，不是答案质量或 token 效果对照。`,evidence);
       text('h3','拟提交的原文片段',evidence);text('p','位置使用 UTF-16，从 0 开始，右端不包含；零匹配及省略内容仍可能有关键依据。最多显示 100 段，完整范围见 JSON。',evidence).className='muted';
       for(const p of plan.selectedPassages.slice(0,100)){const q=text('blockquote',p.text,evidence);text('p',`资料 ${p.sourceId} · 位置 [${p.start}, ${p.end})`,q).className='muted';}
       if(!plan.selectedPassages.length)text('p','预算内没有完整句段，不截断长句凑预算。',evidence);

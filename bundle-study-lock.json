@@ -1,0 +1,12 @@
+{
+  "preparedAt": "2026-10-05T15:09:40.302Z",
+  "sourceHashes": {
+    "review-bundles-protocol.json": "a6fb02b4317f09243c4e8b15daa767f7f1285a58d8c46e3bed4b91d639c8ac27",
+    "bundle-study-fixtures.json": "3b9a645a51104c4bb86ef7cb2f64d8cde6bc59f3782660472ca43753483689b8",
+    "bundle-study-design.json": "f1f48b33f8f92648e95eadc0c7430af9805953a85a5e8a2fe8fcc7a484b94d21",
+    "bundle-study.cjs": "436de4141332d854bf2cb0692dabe61eb1ab75f41fa628ab0ffa470ba19ba580",
+    "bundle-study.test.cjs": "f0247c0bb000f85fd9fa656523cabab1637bf1802decd04fcd3f590424ebf3e7",
+    "passage-study.cjs": "4702e919d6e00412744b6e107c032bbeb798583bbbe28d276b1ee57bd3a82c30",
+    "review-study.cjs": "f6ed3f262e0ebc5b930da770395c6ddd5adb89ed0d04241c453da91783bf75ff"
+  }
+}

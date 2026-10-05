@@ -1,0 +1,39 @@
+{
+  "version": 3,
+  "method": "constraint-bundles-v3",
+  "frozenAt": "2026-10-05T15:05:02.460Z",
+  "observedDevelopmentTaskIds": [
+    "retry-synonym",
+    "retention-replacement",
+    "equal-number-opposite",
+    "date-not-conflict",
+    "unlisted-limit",
+    "normal-label-error",
+    "telemetry-dual-policy",
+    "export-boundary-policy",
+    "archive-scope-policy",
+    "lease-upgrade-policy",
+    "quota-no-definition",
+    "snapshot-date-policy"
+  ],
+  "provenance": "基于已见 v2 失误开发；这12题及测试案例属于开发集。冻结后新评估另立协议。",
+  "sourceHashes": {
+    "review-planner.js": "be63490f5803da199811701e1e3a471e239a6ca99f7986372e1e419cdf6e4e4e",
+    "review-strategy.cjs": "093193501b7d9bd94a03737c07fb75fca41d6faa39df9aa11a062b88e62a031a",
+    "review-planner.test.cjs": "ed5d45a88809aecdce04a6f2610db17d330b7e2eb5205caa25f74862df62be55",
+    "retrieval-study.cjs": "928f4531401c65af6a81cbb274f9e90dd1aea4975ff9695d7fe8d175d48e017c",
+    "quality-study.cjs": "93a8d9ffa4dcb2a9f2d0b94f5974f27ef0a7d4e94eb622fd00c62d63076953cc",
+    "evidence-study.cjs": "69409fe89adfc02b38a86d8eee8dcae2614234461eff01282f867e4caba8ac02",
+    "codex-bridge.cjs": "dcc2477c72a60f1c797e0ff72f5a2e2ef37613c75487575468e6700015a9c833",
+    "codex-response.cjs": "912f8b6478cbbbc3e7285473a0a6c78c1087086517a8f5c0dacb7e56b65f6dc6",
+    "jsonl-reader.cjs": "8bb32e9825b932179e9e74c3f9c66cdbf30ad2a16b3f8cae2ea3bcf37e7ac307",
+    "review-passages.js": "912b879919bb278b5423210c47bed7dc4ada586b3d3613464bccbe533fd770f8",
+    "review-passages-strategy.cjs": "1479e98ba4f18f47c8aaffff3f41affbdf310dad9f72569efcff193aa4aaeaf3",
+    "review-passages.test.cjs": "b68254dfa81b9630042c22c1b7c0920d192109a6329d948b64902eb82a81a930",
+    "review-passages-audit.cjs": "91370f258f36ac21100e8109b156c2ef48c78983d13c182b45ae9df118ae8a28",
+    "review-bundles.js": "478a029fdec9aed1891aae784a3f4da9bc2a06c397941818390dbb44687f53e0",
+    "review-bundles-strategy.cjs": "ddd91b8af85ea82d326942601718ce8258205de9c20efc1bfa9eb2b48f4063ef",
+    "review-bundles.test.cjs": "67fd8c152c386aee50ca9ab599845b9db156542d3ff115c300b001d603126867",
+    "review-bundles-audit.cjs": "4416c6d14ec554561ca5058e1c89d698e24c185a37fb2e1221702168d408ef00"
+  }
+}

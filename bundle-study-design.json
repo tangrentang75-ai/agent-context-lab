@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "method": "constraint-bundles-v3",
+  "preparedAt": "2026-10-05T15:06:42.639Z",
+  "repeats": 4,
+  "pilotTaskIds": [
+    "ingest-short",
+    "ingest-padded",
+    "dispatch-edge-short",
+    "dispatch-edge-padded",
+    "token-scope-short",
+    "token-scope-padded",
+    "session-upgrade-short",
+    "session-upgrade-padded",
+    "batch-except-short",
+    "batch-except-padded",
+    "no-cap-short",
+    "no-cap-padded",
+    "english-edge-short",
+    "english-edge-padded",
+    "calendar-short",
+    "calendar-padded"
+  ],
+  "strategies": [
+    {
+      "id": "all",
+      "label": "一次全读",
+      "method": "v1",
+      "budget": "full"
+    },
+    {
+      "id": "v2-candidate",
+      "label": "片段 v2 半量候选",
+      "method": "v2",
+      "budget": "half",
+      "allowPartialCandidate": true
+    },
+    {
+      "id": "v3-candidate",
+      "label": "证据组 v3 半量候选",
+      "method": "v3",
+      "budget": "half",
+      "mode": "candidate"
+    },
+    {
+      "id": "v3-fallback",
+      "label": "证据组 v3 全文回退",
+      "method": "v3",
+      "budget": "half",
+      "mode": "full-fallback"
+    }
+  ],
+  "modelRequest": "gpt-6-astra",
+  "reasoningEffort": "high",
+  "maxCalls": 256,
+  "maxKnownTokens": 6000000,
+  "maxConsecutiveFailures": 2,
+  "stopOnUnknownUsage": true,
+  "scheduleRule": "按重复轮次、预先固定的16个任务顺序运行，各任务配置循环移位(重复索引+任务索引)%4；每任务每配置四次中各序位一次。",
+  "budgetRule": "全扫描，半量正文UTF-16向下取整；全文回退扩大预算并记录真实提交量。正文上限不是token费用上限。",
+  "comparisonLimits": "比较完整实现，v2/v3候选有部分原文提示，全文回退与全读输入排序可能不同；不作单因素因果归因。",
+  "scopeLimit": "8类人工配置题及成对加长版本，4次响应不是独立任务；不估计总体错误率或自然任务效率。人工核验耗时未测。",
+  "authorization": "用户要求继续直到当前额度耗尽；按固定协议分批推进，限额/未知用量/连续失败停止，不自动使用重置额度、不自动重试。"
+}

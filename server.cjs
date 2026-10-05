@@ -10,7 +10,8 @@ const {latestScaling} = require('./scaling-study.cjs');
 const {latestQuality} = require('./quality-study.cjs');
 const {latestReview} = require('./review-study.cjs');
 const {preflight,latestPassageStudy} = require('./passage-study.cjs');
-const allowed = {'/':'index.html','/index.html':'index.html','/styles.css':'styles.css','/app.js':'app.js','/evaluation.js':'evaluation.js','/sample-data.js':'sample-data.js','/cost-model.js':'cost-model.js','/cost-ui.js':'cost-ui.js','/review.html':'review.html','/review-planner.js':'review-planner.js','/review-ui.js':'review-ui.js','/review-passages.js':'review-passages.js','/review-results-ui.js':'review-results-ui.js','/passage-results-ui.js':'passage-results-ui.js'};
+const {latestBundleStudy} = require('./bundle-study.cjs');
+const allowed = {'/':'index.html','/index.html':'index.html','/styles.css':'styles.css','/app.js':'app.js','/evaluation.js':'evaluation.js','/sample-data.js':'sample-data.js','/cost-model.js':'cost-model.js','/cost-ui.js':'cost-ui.js','/review.html':'review.html','/review-planner.js':'review-planner.js','/review-ui.js':'review-ui.js','/review-passages.js':'review-passages.js','/review-results-ui.js':'review-results-ui.js','/passage-results-ui.js':'passage-results-ui.js','/review-bundles.js':'review-bundles.js','/bundle-results-ui.js':'bundle-results-ui.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
 const port = Number(process.env.PORT || 4173);
 function createServer(executor=bridge,{passageReader=latestPassageStudy}={}) {
@@ -33,6 +34,7 @@ return http.createServer(async (req,res)=>{
     if(req.method==='GET'&&pathname==='/api/review-study'){const data=latestReview();json(data?200:404,data||{error:'尚无覆盖核验实测记录；请先运行 node review-study.cjs'});return;}
     if(req.method==='GET'&&pathname==='/api/passage-plan'){try{json(200,preflight());}catch(e){json(409,{error:e.message});}return;}
     if(req.method==='GET'&&pathname==='/api/passage-study'){const data=passageReader();json(data?200:404,data||{error:'尚无 v2 新任务实验记录；协议已准备，真实实验尚未启动。'});return;}
+    if(req.method==='GET'&&pathname==='/api/bundle-study'){const data=latestBundleStudy();json(data?200:404,data||{error:'尚无 v3 分批记录'});return;}
     if(req.method==='POST'&&pathname==='/api/run') {
       if(req.headers['x-agent-context']!=='local-run'||req.headers.origin!==`http://${host}`){json(403,{error:'请从本机页面运行测试'});return;}
       if(running){json(409,{error:'已有任务运行中，请稍后查看最近结果'});return;}
