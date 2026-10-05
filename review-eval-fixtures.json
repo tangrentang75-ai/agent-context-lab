@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "provenance": "方法 lexical-review-v1 冻结后新编的人工评估题。与方法由同一开发者编写，非外部盲测。不得根据本组结果修改 v1 规则后仍声称独立。",
+  "pilotTaskIds": ["retry-synonym", "retention-replacement"],
+  "pilotSelection": "按预先列出的前两类进行小规模接入与评分检查；余下四类保留，不把未运行任务计入通过率。",
+  "tasks": [
+    {"id":"retry-synonym","title":"消息队列重试设置","description":"核对失败消息的重试次数上限。","kind":"同义改写的现行冲突","goals":[{"id":"retry","label":"失败消息重试次数上限","expected":null,"abstainReason":"同等效力的现行规定分别允许最多 5 次和最多 8 次，无法确定优先级。"}],"documents":[{"id":"01","tags":["retry"],"text":"现行规范甲：失败消息重试次数上限为 5 次。"},{"id":"02","tags":[],"text":"现行规范乙：投递未成功的消息，最多可以再次发送 8 回。此处再次发送就是重试，甲乙同等有效，没有替代关系。"},{"id":"03","tags":["ui"],"text":"队列页面支持筛选，告警展示时间与处理人。"}]},
+    {"id":"retention-replacement","title":"临时文件保留设置","description":"按当前有效规则恢复临时文件保留期限。","kind":"不同数字但有明确替代关系","goals":[{"id":"retention","label":"临时文件保留期限（天）","expected":"23","sourceId":"02","sentence":"当前临时文件保留期限为 23 天。"}],"documents":[{"id":"01","tags":["retention"],"text":"旧版说明：临时文件保留期限为 10 天。本页没有记录其他版本。"},{"id":"02","tags":[],"text":"生效公告：当前临时文件保留期限为 23 天。本公告明确废止旧版说明中的保留期限，其他界面说明仍有效。"},{"id":"03","tags":["ui"],"text":"文件列表支持按名称排序和下载。"}]},
+    {"id":"equal-number-opposite","title":"访问冷却设置","description":"恢复最短允许再次访问的间隔。","kind":"相同数字但边界冲突","goals":[{"id":"cooldown","label":"再次访问的最短间隔（分钟）","expected":null,"abstainReason":"同等有效的规则分别允许和禁止在恰满 16 分钟时访问，无法确定边界。"}],"documents":[{"id":"01","tags":["cooldown"],"text":"现行规则甲：再次访问的最短间隔为 16 分钟，恰好满 16 分钟可以访问。"},{"id":"02","tags":[],"text":"现行规则乙：再次访问间隔必须严格超过 16 分钟，恰好满 16 分钟仍然禁止。甲乙同等有效，未指定优先级。"},{"id":"03","tags":[],"text":"访问日志可以按日期查询。"}]},
+    {"id":"date-not-conflict","title":"通知保留设置","description":"恢复通知保留天数，区分日期和配置数值。","kind":"日期数字并非配置冲突","goals":[{"id":"notice","label":"通知保留天数","expected":"18","sourceId":"01","sentence":"通知保留天数为 18 天。"}],"documents":[{"id":"01","tags":["notice"],"text":"通知保留规则在 2025 年发布。通知保留天数为 18 天。"},{"id":"02","tags":[],"text":"2026 年复核确认：通知保留天数未变，仍执行上述发布的规则。"},{"id":"03","tags":[],"text":"通知页面有已读标记。"}]},
+    {"id":"unlisted-limit","title":"导出次数设置","description":"核对账号每日导出上限。","kind":"资料没有定义上限","goals":[{"id":"exports","label":"账号每日导出次数上限","expected":null,"abstainReason":"全部资料均未定义账号每日导出上限，历史导出数不是限额。"}],"documents":[{"id":"01","tags":["exports"],"text":"账号昨日导出成功 31 次，这是历史统计，不代表每日导出次数上限。"},{"id":"02","tags":[],"text":"导出可选 CSV 和 JSON 格式。"},{"id":"03","tags":[],"text":"管理员可查看导出日志；本文档未约定导出限额。"}]},
+    {"id":"normal-label-error","title":"缓存时间设置","description":"恢复缓存刷新间隔。","kind":"无冲突但目录标签错误","goals":[{"id":"cache","label":"缓存刷新间隔（分钟）","expected":"42","sourceId":"02","sentence":"缓存刷新间隔为 42 分钟。"}],"documents":[{"id":"01","tags":["cache"],"text":"缓存设置页支持深浅主题切换。"},{"id":"02","tags":[],"text":"缓存刷新间隔为 42 分钟。所有节点执行此规则。"},{"id":"03","tags":[],"text":"管理面板支持键盘导航。"}]}
+  ]
+}

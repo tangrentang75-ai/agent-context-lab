@@ -30,7 +30,7 @@ function showReport(payload) {
 function currentTask() { return dataset.tasks.find(t => t.id === selectedTaskId); }
 function notice() {
   $('notice').innerHTML = dataset.demo
-    ? '<span class="notice-icon">i</span><div><strong>当前为人工构造的演示数据</strong><span>下方记录用于体验交互。可点击“运行真实测试”获取实际模型记录。</span></div><span class="tag">DEMO</span>'
+    ? '<span class="notice-icon">i</span><div><strong>当前为人工构造的演示数据</strong><span>用于体验评估流程；真实记录可在<a href="#experiments">实验中心</a>查看。</span></div><span class="tag">DEMO</span>'
     : localDataset ? '<span class="notice-icon">✓</span><div><strong>当前显示本机 Codex 真实执行记录</strong><span>逐项独立验收；用量来自执行器。原始结果保存在本机，人工复核修改需导出留存。少量任务不代表普遍提升。</span></div><span class="tag">LIVE</span>'
     : '<span class="notice-icon">i</span><div><strong>当前为你导入的记录</strong><span>数据仅在当前页面内存中处理；来源与验收证据需自行复核。刷新会恢复示例，请导出保存。</span></div><span class="tag">IMPORTED</span>';
   if(dataset.source==='local-quality-study')$('notice').insertAdjacentHTML('beforeend','<p><strong>本组按安全响应约定验收：</strong>冲突或缺失资料时，正确留空可以通过；通过不表示配置已经恢复。与旧实验的配置完成率分开理解。</p>');
@@ -46,13 +46,17 @@ function renderOverview() {
     ['已记录 token', number(known.reduce((n,x) => n+x.run.tokens,0)), `成本数据完整度 ${known.length} / ${all.length}`]
   ];
   $('stats').innerHTML = stats.map((s,i) => `<div class="stat"><div>${s[0]}<span>${['◫','⇄','✓','◈'][i]}</span></div><strong>${s[1]}</strong><small>${s[2]}</small></div>`).join('');
+  const pending = all.filter(x=>!x.result.allReviewed).length;
+  const rejected = all.length-complete-pending;
+  const parts=[{label:'验收合格',count:complete,className:'accepted'},{label:'待核验',count:pending,className:'pending'},{label:'未满足验收',count:rejected,className:'rejected'}];
+  $('outcome-summary').innerHTML='<div class="outcome-total"><strong>'+complete+'<small> / '+all.length+'</small></strong><span>记录满足当前验收要求</span></div><div class="outcome-track" role="img" aria-label="'+parts.map(p=>p.label+' '+p.count+' 条').join('，')+'">'+parts.filter(p=>p.count).map(p=>'<span class="'+p.className+'" style="width:'+p.count/Math.max(1,all.length)*100+'%"></span>').join('')+'</div><div class="outcome-legend">'+parts.map(p=>'<span><i class="'+p.className+'"></i>'+p.label+'<strong>'+p.count+'</strong></span>').join('')+'</div>';
   const search = $('search').value.trim().toLowerCase(), filter = $('scenario-filter').value;
   const tasks = dataset.tasks.filter(t => (filter === 'all' || t.scenario === filter) && `${t.title} ${t.description}`.toLowerCase().includes(search));
   $('task-count').textContent = tasks.length;
   $('task-grid').innerHTML = tasks.length ? tasks.map(t => {
     const required = t.goals.filter(g => g.required).length;
     const pass = t.runs.filter(r => { const e=E.evaluate(t,r); return e.accepted && e.allReviewed; }).length;
-    return `<article class="task-card"><div class="card-top"><span class="scenario ${t.scenario}">${escapeHTML(E.scenarios[t.scenario])}</span><span class="muted">${t.runs.length} 条记录</span></div><h3>${escapeHTML(t.title)}</h3><p>${escapeHTML(t.description)}</p><div class="goal-preview">${t.goals.slice(0,2).map(g=>`<span><i>${g.required?'◆':'◇'}</i>${escapeHTML(g.label)}</span>`).join('')}</div><div class="card-meta"><span>${required} 项必需目标</span><span>验收合格 ${pass}/${t.runs.length}</span></div><button class="card-action" data-task="${escapeHTML(t.id)}">进入目标与策略比较 <span>↗</span></button></article>`;
+    return `<article class="task-card"><div class="card-top"><span class="scenario ${t.scenario}">${escapeHTML(E.scenarios[t.scenario])}</span><span class="muted">${t.runs.length} 条记录</span></div><h3>${escapeHTML(t.title)}</h3><p>${escapeHTML(t.description)}</p><div class="goal-preview">${t.goals.slice(0,2).map(g=>`<span><i>${g.required?'◆':'◇'}</i>${escapeHTML(g.label)}</span>`).join('')}</div><div class="task-progress"><span>验收合格 <strong>${pass} / ${t.runs.length}</strong></span><div aria-hidden="true"><i style="width:${pass/Math.max(1,t.runs.length)*100}%"></i></div></div><div class="card-meta"><span>${required} 项必需目标</span><span>${dataset.demo?'演示记录':localDataset?'本机实测':'导入记录'}</span></div><button class="card-action" data-task="${escapeHTML(t.id)}">进入目标与策略比较 <span>↗</span></button></article>`;
   }).join('') : '<div class="empty">没有匹配的任务。试试其他关键词或场景。</div>';
   $('task-grid').querySelectorAll('[data-task]').forEach(button => button.addEventListener('click', () => { selectTask(button.dataset.task); location.hash = 'compare'; route(); }));
 }
@@ -100,10 +104,11 @@ function renderAll() {
   $('compare-task').value=selectedTaskId;renderOverview();renderCompare();route();
 }
 function route() {
-  const requested=location.hash.slice(1), view=['overview','compare','research'].includes(requested)?requested:'overview';
-  for(const name of ['overview','compare','research']) $(`view-${name}`).hidden=name!==view;
+  const requested=location.hash.slice(1), view=['overview','compare','experiments','research'].includes(requested)?requested:'overview';
+  for(const name of ['overview','compare','experiments','research']) $(`view-${name}`).hidden=name!==view;
   document.querySelectorAll('[data-view]').forEach(link=>{link.classList.toggle('active',link.dataset.view===view);if(link.dataset.view===view)link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');});
-  const copy={overview:['任务评估','让 AI 的投入，对准你的目标。','把目标、执行与验收放在一起，理解每一次任务的取舍。'],compare:['策略比较','先达成目标，再比较投入。','在相同条件下复核证据，找到符合你要求的执行记录。'],research:['课题与路线','从一个观察，走向可验证的研究。','扩大应用视野，同时保留具体、可落地的研究问题。']}[view];
+  const copy={overview:['任务概览','工作空间概览','追踪任务、复核证据，让每一次投入对准目标。'],experiments:['实验中心','让每一次取舍，都有依据。','在这里探索证据、停止条件与资源投入；读取记录不会重新运行模型。'],compare:['策略比较','策略比较','在相同条件下复核证据，找到符合你要求的执行记录。'],research:['课题与路线','从一个观察，走向可验证的研究。','扩大应用视野，同时保留具体、可落地的研究问题。']}[view];
+  document.body.dataset.view=view;
   $('breadcrumb').textContent=copy[0];$('page-title').textContent=copy[1];$('page-subtitle').textContent=copy[2];
 }
 $('search').addEventListener('input',renderOverview);$('scenario-filter').addEventListener('change',renderOverview);
@@ -115,6 +120,7 @@ $('file-input').addEventListener('change',async event=>{
 });
 $('template-button').addEventListener('click',()=>{download('agent-context-example.json',AGENT_SAMPLE);toast('已下载示例 JSON，可按相同结构替换为自己的记录');});
 $('reset-button').addEventListener('click',()=>{if(!confirm('恢复内置示例会清除本页导入记录和复核修改。需要保留的数据请先导出报告。确认恢复？'))return;dataset=structuredClone(AGENT_SAMPLE);localDataset=false;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;budget=10000;$('search').value='';$('scenario-filter').value='all';renderAll();toast('已恢复内置演示数据');});
+document.querySelectorAll('.sidebar a[href^="#"], .inline-link[href^="#"]').forEach(link=>link.addEventListener('click',()=>window.scrollTo({top:0,left:0,behavior:'instant'})));
 window.addEventListener('hashchange',route);renderAll();
 
 function showLive(data) {
