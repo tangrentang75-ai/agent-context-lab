@@ -2,7 +2,7 @@
 
 **以用户目标为起点，复核 AI 任务的验收证据、执行过程与资源投入。**
 
-大学生创新创业训练计划候选项目。当前 v0.14 提供网页评估、本机 Codex 执行连接、上下文与检索实验、证据补读、成本推演、长度对照、质量反例审计及停止前核验和对照实测。内置演示数据仍为人工构造；真实记录单独显示。尚无通用性能提升结论。
+大学生创新创业训练计划候选项目。当前 v0.15 提供网页评估、本机 Codex 执行连接、上下文与检索实验、证据补读、成本推演、长度对照、质量反例审计及停止前核验和对照实测。内置演示数据仍为人工构造；真实记录单独显示。尚无通用性能提升结论。
 
 v0.10 整理工作台界面：任务概览优先显示当前数据集的任务、用量和验收分布；八个研究入口集中到“实验中心”，读取结果后进入策略比较。统一导航、表单、证据详情和停止前核验页，并支持窄屏布局。验收分布来自当前记录，示例状态明确标注。设计参考与检查范围见 [界面升级说明](ui-design.md)。
 
@@ -13,6 +13,8 @@ v0.12 准备冻结后的新任务试点：六类新编题中预先选择两类�
 v0.13 完成 v2 新任务真实试点：16 个配置格、12 次调用、179,319 tokens。全读响应 4/4 通过；片段候选 2/4，导出边界句两次遗漏。默认停止 4 次未调用，但全部待核验；没有效率提升结论。原始记录经源码、输入、评分与用量审计，详见 [v2 试点实测报告](passage-study-report.md)。
 
 v0.14 新增约束证据组 v3：将匹配句与边界、否定、适用范围、替代及数量线索整组选择；部分正文仍待核验，全文回退明确扩大预算。方法冻结后新编8类短/加长成对任务，四配置、四重复，固定256格，分批真实评估至额度或协议停止条件触发。每次调用存档并分批重算审计，未运行单列；过程记录见 [v3 实测检查点](bundle-study-report.md)，规则与限制见 [方法说明](review-bundles-method.md)、[执行前协议](bundle-study-plan.md)。90项软件测试通过，不代表模型准确率。
+
+v0.15 新增资源决策工作台：按交付目标和正文预算比较停止、候选和全文提交，扩大预算需显式选择；决策依据在当前浏览器保存并导出。规划记录统一标记尚未执行，不伪造用量、完成率或人工耗时。v3 实验已在额度边界停止，39次调用中38次完成、1次失败且用量未知，已知580,180 tokens，217格未运行；最终报告与原始停止状态保留。详情见 [资源决策说明](resource-allocation.md)。
 
 ## 扩展后的课题定位
 
@@ -79,7 +81,7 @@ npm start
 npm test
 ```
 
-或 `node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs review-planner.test.cjs review-study.test.cjs review-passages.test.cjs passage-study.test.cjs`。测试本身不会调用模型。
+或 `node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs review-planner.test.cjs review-study.test.cjs review-passages.test.cjs passage-study.test.cjs review-bundles.test.cjs bundle-study.test.cjs resource-decision.test.cjs`。测试本身不会调用模型。
 
 覆盖核验试点：`node review-study.cjs` 或 `npm run review-study`。启动前校验冻结方法哈希，最多 10 次调用、160,000 已知累计 tokens 的调用间阈值，连续两次失败停止。六类题中仅预定前两类进入本试点；其他四类未运行。从“打开停止前核验”进入页面后点击“查看真实对照记录”只读取已有结果，不调用模型。
 
@@ -109,6 +111,7 @@ npm test
 
 ## 文档与下一步
 
+- [从证据保留到任务资源分配](resource-allocation.md)
 - [产品范围与后续路线](product-plan.md)
 - [研究问题、相关工作与实验方案](research-plan.md)
 - [JSON 数据格式与评价口径](data-format.md)
