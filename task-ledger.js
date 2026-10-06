@@ -15,7 +15,7 @@
   function open(record,{now=new Date().toISOString(),ledgerId=id()}={}){
     return {type:'task-ledger',version:1,id:text(ledgerId,'台账编号',100),createdAt:date(now),decision:snapshot(record),executions:[],reviews:[]};
   }
-  function execution(raw,decision,{now=new Date().toISOString(),executionId=id()}={}){
+  function execution(raw,decision,{now=new Date().toISOString(),executionId=id(),receipt=null}={}){
     if(decision.selectedAction==='stop')throw Error('停止路径不追加模型执行；请另存新的资源决策');
     if(!raw||!['complete','failed'].includes(raw.status))throw Error('执行状态应为 complete 或 failed');
     const output=raw.status==='complete'?text(raw.output,'实际输出',100000):(typeof raw.output==='string'?raw.output.slice(0,100000):'');
@@ -24,11 +24,14 @@
     if(input!==null&&out!==null&&!Number.isSafeInteger(input+out))throw Error('总用量超过整数范围');
     const seconds=raw.durationSec;
     if(seconds!==null&&(!Number.isFinite(seconds)||seconds<0||seconds>86400))throw Error('执行耗时须为 0–86400 秒或 null');
-    return {id:text(executionId,'执行编号',100),createdAt:date(now),status:raw.status,output,model:text(raw.model,'模型或执行器',300),modelCalls:raw.modelCalls,inputTokens:input,outputTokens:out,knownTokens:(input??0)+(out??0),tokens:input===null||out===null?null:input+out,durationSec:seconds,reference:text(raw.reference,'记录来源',1000),provenance:'user_reported',usageSource:'user_reported',independentlyVerified:false};
+    const normalized={id:text(executionId,'执行编号',100),createdAt:date(now),status:raw.status,output,model:text(raw.model,'模型或执行器',300),modelCalls:raw.modelCalls,inputTokens:input,outputTokens:out,knownTokens:(input??0)+(out??0),tokens:input===null||out===null?null:input+out,durationSec:seconds,reference:text(raw.reference,'记录来源',1000),provenance:receipt?'local_receipt_copy':'user_reported',usageSource:receipt?'cli_receipt_copy':'user_reported',independentlyVerified:false};
+    if(receipt){if(!receipt||receipt.type!=='task-execution-receipt'||receipt.version!==1||!['local_codex','test_double'].includes(receipt.executionMode)||receipt.independentlyVerified!==false||receipt.modelCalls!==1||!['complete','failed'].includes(receipt.status)||typeof receipt.protocolDeviation!=='boolean'||JSON.stringify(snapshot(receipt.decision))!==JSON.stringify(decision))throw Error('回执与台账决策不一致');for(const k of ['status','output','model','modelCalls','inputTokens','outputTokens','durationSec','knownTokens','tokens'])if(receipt[k]!==normalized[k])throw Error('回执与执行内容不一致：'+k);if(receipt.finishedAt!==normalized.createdAt||receipt.id!==normalized.id)throw Error('回执编号或时间不一致');normalized.receipt=copy(receipt);}
+    return normalized;
   }
   function appendExecution(ledger,raw,options){
     validate(ledger);if(ledger.executions.length>=30)throw Error('每份台账最多30次执行');const next=copy(ledger);next.executions.push(execution(raw,next.decision,options));return next;
   }
+  function appendReceipt(ledger,receipt){validate(ledger);if(ledger.executions.some(r=>r.id===receipt.id))throw Error('该回执已关联，未重复计费');if(ledger.executions.length>=30)throw Error('每份台账最多30次执行');const next=copy(ledger),raw={...receipt,reference:'本机执行回执副本 '+receipt.id+'；真实性须由本机记录核对'};next.executions.push(execution(raw,next.decision,{now:receipt.finishedAt,executionId:receipt.id,receipt}));return next;}
   function review(raw,ledger,executionId,{now=new Date().toISOString(),reviewId=id()}={}){
     const run=ledger.executions.find(e=>e.id===executionId);if(!run||run.status!=='complete')throw Error('只能核验已获得输出的执行');
     if(!raw||!raw.checks||typeof raw.reviewedAllDocuments!=='boolean')throw Error('请提供逐目标核验及资料复核声明');
@@ -54,7 +57,7 @@
   function validate(ledger){
     if(!ledger||ledger.type!=='task-ledger'||ledger.version!==1||!Array.isArray(ledger.executions)||!Array.isArray(ledger.reviews)||ledger.executions.length>30||ledger.reviews.length>100)throw Error('台账格式不正确');
     text(ledger.id,'台账编号',100);date(ledger.createdAt);snapshot(ledger.decision);const ids=new Set();
-    for(const r of ledger.executions){if(ids.has(r.id))throw Error('执行编号重复');ids.add(r.id);const normalized=execution(r,ledger.decision,{now:r.createdAt,executionId:r.id});for(const k of Object.keys(normalized))if(JSON.stringify(normalized[k])!==JSON.stringify(r[k]))throw Error('执行记录字段不一致：'+k);}
+    for(const r of ledger.executions){if(ids.has(r.id))throw Error('执行编号重复');ids.add(r.id);const normalized=execution(r,ledger.decision,{now:r.createdAt,executionId:r.id,receipt:r.receipt||null});for(const k of Object.keys(normalized))if(JSON.stringify(normalized[k])!==JSON.stringify(r[k]))throw Error('执行记录字段不一致：'+k);}
     ids.clear();for(const r of ledger.reviews){if(ids.has(r.id))throw Error('核验编号重复');ids.add(r.id);const normalized=review(r,ledger,r.executionId,{now:r.createdAt,reviewId:r.id});for(const k of Object.keys(normalized))if(JSON.stringify(normalized[k])!==JSON.stringify(r[k]))throw Error('核验记录字段不一致：'+k);}
     return ledger;
   }
@@ -63,7 +66,7 @@
     const allPass=!!check&&Object.values(check.checks).every(c=>c.status==='pass');
     const fullReviewed=ledger.decision.selectedAction==='full'||ledger.decision.coverage==='all_provided_documents'||check?.reviewedAllDocuments===true;
     const state=!run?'not_executed':run.status==='failed'?'execution_failed':!check?'pending_review':Object.values(check.checks).some(c=>c.status==='fail')?'review_failed':allPass?(fullReviewed?'human_accepted':'candidate_accepted'):'pending_review';
-    return {state,modelCalls:ledger.executions.reduce((n,r)=>n+r.modelCalls,0),knownTokens:ledger.executions.reduce((n,r)=>n+r.knownTokens,0),unknownUsageExecutions:ledger.executions.filter(r=>r.tokens===null).length,tokens:ledger.executions.some(r=>r.tokens===null)?null:ledger.executions.reduce((n,r)=>n+r.tokens,0),latestExecutionId:run?.id||null,latestReviewId:check?.id||null,humanAccepted:state==='human_accepted',independentlyVerified:false,humanReviewKnownSec:ledger.reviews.reduce((n,r)=>n+(r.humanReviewSec??0),0),unmeasuredReviews:ledger.reviews.filter(r=>r.humanReviewSec===null).length};
+    return {state,modelCalls:ledger.executions.reduce((n,r)=>n+r.modelCalls,0),reportedExecutions:ledger.executions.filter(r=>r.provenance==='user_reported').length,receiptCopies:ledger.executions.filter(r=>r.provenance==='local_receipt_copy').length,knownTokens:ledger.executions.reduce((n,r)=>n+r.knownTokens,0),unknownUsageExecutions:ledger.executions.filter(r=>r.tokens===null).length,tokens:ledger.executions.some(r=>r.tokens===null)?null:ledger.executions.reduce((n,r)=>n+r.tokens,0),latestExecutionId:run?.id||null,latestReviewId:check?.id||null,humanAccepted:state==='human_accepted',independentlyVerified:false,humanReviewKnownSec:ledger.reviews.reduce((n,r)=>n+(r.humanReviewSec??0),0),unmeasuredReviews:ledger.reviews.filter(r=>r.humanReviewSec===null).length};
   }
-  return {open,appendExecution,appendReview,validate,summarize};
+  return {open,appendExecution,appendReceipt,appendReview,validate,summarize};
 });

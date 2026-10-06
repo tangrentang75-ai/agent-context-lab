@@ -11,10 +11,11 @@ const {latestQuality} = require('./quality-study.cjs');
 const {latestReview} = require('./review-study.cjs');
 const {preflight,latestPassageStudy} = require('./passage-study.cjs');
 const {latestBundleStudy} = require('./bundle-study.cjs');
+const taskExecution = require('./task-executor.cjs');
 const allowed = {'/':'index.html','/index.html':'index.html','/styles.css':'styles.css','/app.js':'app.js','/evaluation.js':'evaluation.js','/sample-data.js':'sample-data.js','/cost-model.js':'cost-model.js','/cost-ui.js':'cost-ui.js','/review.html':'review.html','/review-planner.js':'review-planner.js','/review-ui.js':'review-ui.js','/review-passages.js':'review-passages.js','/review-results-ui.js':'review-results-ui.js','/passage-results-ui.js':'passage-results-ui.js','/review-bundles.js':'review-bundles.js','/bundle-results-ui.js':'bundle-results-ui.js','/decision.html':'decision.html','/decision.css':'decision.css','/resource-decision.js':'resource-decision.js','/decision-ui.js':'decision-ui.js','/ledger.html':'ledger.html','/task-ledger.js':'task-ledger.js','/ledger-ui.js':'ledger-ui.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
 const port = Number(process.env.PORT || 4173);
-function createServer(executor=bridge,{passageReader=latestPassageStudy}={}) {
+function createServer(executor=bridge,{passageReader=latestPassageStudy,taskExecutor=taskExecution}={}) {
 let running=false;
 return http.createServer(async (req,res)=>{
   const json=(code,body)=>{res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(JSON.stringify(body));};
@@ -35,6 +36,14 @@ return http.createServer(async (req,res)=>{
     if(req.method==='GET'&&pathname==='/api/passage-plan'){try{json(200,preflight());}catch(e){json(409,{error:e.message});}return;}
     if(req.method==='GET'&&pathname==='/api/passage-study'){const data=passageReader();json(data?200:404,data||{error:'尚无 v2 新任务实验记录；协议已准备，真实实验尚未启动。'});return;}
     if(req.method==='GET'&&pathname==='/api/bundle-study'){const data=latestBundleStudy();json(data?200:404,data||{error:'尚无 v3 分批记录'});return;}
+    if(req.method==='GET'&&pathname.startsWith('/api/task-execution/')){try{const data=taskExecutor.read(pathname.slice('/api/task-execution/'.length));json(data?200:404,data||{error:'没有此编号的本机回执'});}catch(e){json(400,{error:e.message});}return;}
+    if(req.method==='POST'&&pathname==='/api/task-execution'){
+      if(req.headers['x-agent-context']!=='local-task-run'||req.headers.origin!==`http://${host}`){json(403,{error:'请从本机任务台账页面执行'});return;}
+      if(!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type']||'')){json(415,{error:'需要 JSON 请求'});return;}
+      let body;try{let bytes=0;const parts=[];for await(const part of req){bytes+=part.length;if(bytes>1500000)throw Error('资料请求超过大小上限');parts.push(part);}body=JSON.parse(Buffer.concat(parts).toString('utf8'));}catch{json(400,{error:'请求格式不正确或资料超过大小上限'});return;}
+      if(running){json(409,{error:'已有执行进行中；可通过执行编号恢复读取，不要重复启动'});return;}
+      running=true;try{json(200,await taskExecutor.run(body));}catch(e){json(409,{error:e.message});}finally{running=false;}return;
+    }
     if(req.method==='POST'&&pathname==='/api/run') {
       if(req.headers['x-agent-context']!=='local-run'||req.headers.origin!==`http://${host}`){json(403,{error:'请从本机页面运行测试'});return;}
       if(running){json(409,{error:'已有任务运行中，请稍后查看最近结果'});return;}

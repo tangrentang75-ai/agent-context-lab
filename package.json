@@ -1,11 +1,11 @@
 {
   "name": "agent-context-lab",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "private": true,
   "description": "Goal-driven AI task evaluation prototype",
   "scripts": {
     "start": "node server.cjs",
-    "test": "node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs review-planner.test.cjs review-study.test.cjs review-passages.test.cjs passage-study.test.cjs review-bundles.test.cjs bundle-study.test.cjs resource-decision.test.cjs task-ledger.test.cjs",
+    "test": "node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs review-planner.test.cjs review-study.test.cjs review-passages.test.cjs passage-study.test.cjs review-bundles.test.cjs bundle-study.test.cjs resource-decision.test.cjs task-ledger.test.cjs task-executor.test.cjs task-execution-api.test.cjs",
     "experiment": "node codex-bridge.cjs",
     "study": "node context-study.cjs",
     "retrieval": "node retrieval-study.cjs",
