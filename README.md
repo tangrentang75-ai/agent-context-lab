@@ -2,7 +2,7 @@
 
 **以用户目标为起点，复核 AI 任务的验收证据、执行过程与资源投入。**
 
-大学生创新创业训练计划候选项目。当前 v0.15 提供网页评估、本机 Codex 执行连接、上下文与检索实验、证据补读、成本推演、长度对照、质量反例审计及停止前核验和对照实测。内置演示数据仍为人工构造；真实记录单独显示。尚无通用性能提升结论。
+大学生创新创业训练计划候选项目。当前 v0.16 提供网页评估、本机 Codex 执行连接、上下文与检索实验、证据补读、成本推演、长度对照、质量反例审计及停止前核验和对照实测。内置演示数据仍为人工构造；真实记录单独显示。尚无通用性能提升结论。
 
 v0.10 整理工作台界面：任务概览优先显示当前数据集的任务、用量和验收分布；八个研究入口集中到“实验中心”，读取结果后进入策略比较。统一导航、表单、证据详情和停止前核验页，并支持窄屏布局。验收分布来自当前记录，示例状态明确标注。设计参考与检查范围见 [界面升级说明](ui-design.md)。
 
@@ -57,6 +57,8 @@ v0.9 新增“打开停止前核验”：编辑资料、设定扫描与正文提
 
 v0.9.1 完成冻结后新编题的两题试点，四种配置共 8 次调用、118,159 tokens。全读和完整正文配置均自动完成 2/2；半量正文 0/2，两条错误候选均保持待核验；旧补读错误放行两条。本轮未证明性能提升。网页可读实测和导出 JSON，55 项测试通过。详见 [覆盖核验试点报告](review-study-report.md)。
 
+v0.16 新增任务台账：关联固定决策快照，追加执行输出、失败尝试、未知用量与逐目标人工核验；新增执行不继承旧验收，部分正文候选不能直接算最终交付。执行与费用目前由人工填写，不调用模型；引文位置只作字面校验，人工验收不冒充独立验证。见 [台账说明](task-ledger-method.md)。
+
 ## 运行
 
 v0.6 新增“打开成本推演”，比较一次全读与可能补读的期望 token，可填入上轮实测成本或手动调整假设；它不调用模型，也不预测质量。另有两个新编任务、5 次真实调用的迁移检查，运行前约束来源编号格式，两策略均通过，补读策略平均 token 高约 49.3%。详见 [成本推演与新任务报告](cost-validation-report.md)。
@@ -81,7 +83,7 @@ npm start
 npm test
 ```
 
-或 `node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs review-planner.test.cjs review-study.test.cjs review-passages.test.cjs passage-study.test.cjs review-bundles.test.cjs bundle-study.test.cjs resource-decision.test.cjs`。测试本身不会调用模型。
+或 `node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs review-planner.test.cjs review-study.test.cjs review-passages.test.cjs passage-study.test.cjs review-bundles.test.cjs bundle-study.test.cjs resource-decision.test.cjs task-ledger.test.cjs`。测试本身不会调用模型。
 
 覆盖核验试点：`node review-study.cjs` 或 `npm run review-study`。启动前校验冻结方法哈希，最多 10 次调用、160,000 已知累计 tokens 的调用间阈值，连续两次失败停止。六类题中仅预定前两类进入本试点；其他四类未运行。从“打开停止前核验”进入页面后点击“查看真实对照记录”只读取已有结果，不调用模型。
 
