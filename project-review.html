@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>项目体检 · 任务罗盘</title>
+  <link rel="stylesheet" href="project-review.css">
+  <script defer src="project-review.js"></script><script defer src="project-review-ui.js"></script>
+  <script defer src="observation-audit.js"></script><script defer src="observation-audit-ui.js"></script>
+</head>
+<body>
+  <a class="skip" href="#content">跳到检查结果</a>
+  <header class="site-header"><a class="brand" href="/">◈ 任务罗盘</a><nav aria-label="工作台导航"><a href="/">任务工作台</a><a href="decision.html">资源决策</a><a href="ledger.html">执行台账</a><a href="project-review.html" aria-current="page">项目体检</a></nav><span class="local">本机资料</span></header>
+  <main id="content">
+    <section class="intro"><div><p class="eyebrow">从“做出来了”到“确实有用”</p><h1>项目下一步，该做什么？</h1><p class="subtitle">先看证据能说明什么，再安排值得投入的工作。</p></div><div class="actions"><button id="load-local" class="primary">读取银龄净网最新检查</button><button id="import-review">导入检查记录</button><input id="review-file" type="file" accept=".json,application/json" hidden></div></section>
+    <p id="notice" class="notice" role="status" aria-live="polite">正在读取本机已保存的项目检查…</p>
+    <section class="toolbar" aria-label="记录与导出"><label>查看记录<select id="record-select" disabled><option>暂无记录</option></select></label><div class="actions"><button id="new-round" disabled>记录新一轮检查</button><button id="export-report" disabled>导出报告</button><button id="export-review" disabled>导出检查数据</button><button id="export-dataset" disabled>导出首页验收数据</button></div></section>
+    <section id="empty" class="empty" hidden><h2>还没有检查记录</h2><p>导入 project-review-v1 格式的 JSON，或读取本机银龄净网资料。不会自动调用 AI 或访问手机。</p><button id="template">下载空白模板</button></section>
+    <div id="result" hidden>
+      <section class="overview"><div class="summary"><p class="eyebrow" id="review-date"></p><h2 id="review-title"></h2><p id="review-scope"></p><p id="verdict" class="verdict"></p><p id="review-origin" class="fine"></p></div><div id="metrics" class="metrics" aria-label="检查项统计"></div></section>
+      <div class="explanation"><strong>通过的是具体检查项，不是整个产品。</strong><p>引文、证据类型与版本可以核对；记录真实性和结论是否成立仍需人工复核。这里不自动批准上线，也不把缺失证据算成失败率。</p></div>
+      <details class="boundaries observation-panel"><summary>准备下一轮广告观察 · 下载空表并检查缺项</summary><p>空白、未知和截图缺失不会算成“0个广告”。两组条件不同、任务未完成或出现错误页，会单独标出。数据只在浏览器读取。</p><div class="actions"><button id="observation-template">下载8轮空表</button><button id="observation-import">检查填写后的CSV</button><button id="observation-export" disabled>导出观察表检查</button><input id="observation-file" type="file" accept=".csv,text/csv" hidden></div><p id="observation-notice" role="status"></p><div id="observation-results"></div></details>
+      <section class="section"><div class="heading"><div><p class="eyebrow">先解决影响使用的问题</p><h2>下一步工作</h2></div><p>按必需项和人工指定的优先级排序；同级先看已发现的问题</p></div><div id="next-actions" class="next-grid"></div></section>
+      <section class="section"><div class="heading"><div><h2>逐项看依据</h2><p>可展开来源、版本与原文节选</p></div><div class="filters"><label>状态<select id="status-filter"><option value="all">全部</option><option value="fail">发现问题</option><option value="unknown">证据待补</option><option value="pass">已有依据</option></select></label><label>搜索<input id="review-search" type="search" placeholder="例如：广告、恢复、老人"></label></div></div><p id="filter-count" class="fine" role="status"></p><div id="criteria"></div></section>
+      <section class="section"><div class="heading"><div><h2>和上次相比，哪里变了？</h2><p>新增标准单独展示，不把更换标准当作进步。</p></div><label>对照记录<select id="baseline-select"></select></label></div><div id="comparison"></div></section>
+      <details class="boundaries"><summary>本轮检查范围与限制</summary><ul id="limitations"></ul></details>
+    </div>
+    <footer><p>任务罗盘 · 项目体检 v0.19<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除本页保存的导入记录</button></footer>
+  </main>
+  <dialog id="editor" aria-labelledby="editor-title">
+    <div class="heading"><h2 id="editor-title">记录新一轮检查</h2><button id="editor-close" type="button">关闭</button></div>
+    <p class="fine">新记录会保存在浏览器，旧记录保留。只填写真正取得的证据；改变版本后，旧版设备与电脑结论需要重新检查。关闭窗口不会保存未提交内容。</p>
+    <div class="edit-grid">
+      <label>检查日期<input id="edit-date" type="date" required></label>
+      <label>本轮软件或材料版本<input id="edit-version" maxlength="120" required></label>
+      <label>实际审阅人或方式<input id="edit-reviewer" maxlength="300" placeholder="例如：项目成员现场复核" required></label>
+      <label>本轮检查范围<textarea id="edit-scope" maxlength="3000" rows="3" required></textarea></label>
+    </div>
+    <hr>
+    <label>要更新的检查项<select id="edit-criterion"></select></label>
+    <p id="edit-requirements" class="fine"></p>
+    <div class="edit-grid"><label>判断<select id="edit-status"><option value="unknown">证据待补</option><option value="pass">已有依据</option><option value="fail">发现问题</option></select></label><label>本轮判断说明<textarea id="edit-summary" maxlength="3000" rows="3"></textarea></label></div>
+    <details id="edit-source-box"><summary>为本项新增或替换引用</summary><p class="fine">留空则保留原引用。填写后会用这一份证据替换本项原引用；其他检查项不受影响。</p>
+      <div class="edit-grid"><label>来源标题<input id="edit-source-title" maxlength="200"></label><label>证据类型<select id="edit-source-kind"><option value="document">方案与材料</option><option value="desktop">电脑测试</option><option value="device">设备实测记录</option><option value="participant">参与者观察记录</option></select></label><label>证据日期<input id="edit-source-date" type="date"></label><label>证据对应版本<input id="edit-source-version" maxlength="120"></label><label>原记录的位置<input id="edit-source-locator" maxlength="500" placeholder="文件名、记录编号或章节"></label></div>
+      <label>原文节选<textarea id="edit-source-text" maxlength="16000" rows="4" placeholder="仅粘贴本项需要的原文，不包含个人账号、联系方式或私人页面"></textarea></label>
+      <label>支持本项的连续原句<textarea id="edit-source-quote" maxlength="3000" rows="2" placeholder="必须能在上面的节选中找到"></textarea></label>
+    </details>
+    <div class="edit-grid"><label>下一步动作<input id="edit-next-action" maxlength="500"></label><label>负责角色<input id="edit-next-owner" maxlength="200"></label><label>验证方法<textarea id="edit-next-method" maxlength="1500" rows="3"></textarea></label><label>完成时应取得的证据<textarea id="edit-next-done" maxlength="1500" rows="3"></textarea></label><label>优先级<select id="edit-next-priority"><option value="now">优先处理</option><option value="next">随后验证</option><option value="later">条件具备后开展</option></select></label></div>
+    <p id="editor-notice" class="notice" role="status"></p>
+    <div class="actions"><button id="editor-save" class="primary" type="button">保存为新记录</button><span class="fine">切换检查项会保留在当前草稿；点击保存才写入浏览器。</span></div>
+  </dialog>
+</body>
+</html>

@@ -1,0 +1,235 @@
+{
+  "version": 1,
+  "createdAt": "2026-10-06T05:16:54.979Z",
+  "provenance": "开发者人工编写的链路验证题，主题与前期任务有重叠，非独立盲测",
+  "tasks": [
+    {
+      "id": "notice-replacement",
+      "title": "通知替代旧规核对",
+      "goals": [
+        {
+          "id": "period",
+          "label": "现行同步周期分钟；response只能是严格JSON {\"value\":字符串或null,\"kind\":\"supported\"或\"conflict\"或\"missing\"}，不得添加解释或代码围栏",
+          "expected": "23",
+          "kind": "supported",
+          "requiredSourceIds": [
+            "notice"
+          ]
+        }
+      ],
+      "documents": [
+        {
+          "id": "legacy",
+          "text": "旧规定同步周期为 7 分钟。"
+        },
+        {
+          "id": "notice",
+          "text": "现行通知：同步周期为 23 分钟。本通知替代旧规定的同步周期。"
+        },
+        {
+          "id": "interface",
+          "text": "页面支持收藏和排序，展示时间不定义同步周期。"
+        }
+      ]
+    },
+    {
+      "id": "equal-authority",
+      "title": "同效力冲突核对",
+      "goals": [
+        {
+          "id": "window",
+          "label": "配置窗口分钟；response只能是严格JSON {\"value\":字符串或null,\"kind\":\"supported\"或\"conflict\"或\"missing\"}，不得添加解释或代码围栏",
+          "expected": null,
+          "kind": "conflict",
+          "requiredSourceIds": [
+            "alpha",
+            "beta"
+          ]
+        }
+      ],
+      "documents": [
+        {
+          "id": "alpha",
+          "text": "配置窗口为 5 分钟。"
+        },
+        {
+          "id": "beta",
+          "text": "配置窗口为 17 分钟。两份规定同等效力，没有优先级。"
+        },
+        {
+          "id": "interface",
+          "text": "颜色和窗口标题可以修改。"
+        }
+      ]
+    },
+    {
+      "id": "zero-retry",
+      "title": "具体范围与零值核对",
+      "goals": [
+        {
+          "id": "retry",
+          "label": "测试环境重试次数；response只能是严格JSON {\"value\":字符串或null,\"kind\":\"supported\"或\"conflict\"或\"missing\"}，不得添加解释或代码围栏",
+          "expected": "0",
+          "kind": "supported",
+          "requiredSourceIds": [
+            "test"
+          ]
+        }
+      ],
+      "documents": [
+        {
+          "id": "general",
+          "text": "通用默认重试次数为 9 次。"
+        },
+        {
+          "id": "test",
+          "text": "测试环境特别规定：重试次数为 0 次；其他环境继续使用通用默认。"
+        },
+        {
+          "id": "misc",
+          "text": "测试页面可导出截图，导出次数不是重试次数。"
+        }
+      ]
+    },
+    {
+      "id": "strict-boundary",
+      "title": "包含边界条件的响应核对",
+      "goals": [
+        {
+          "id": "limit",
+          "label": "满足至少2.5秒才允许，所需最小秒数；response只能是严格JSON {\"value\":字符串或null,\"kind\":\"supported\"或\"conflict\"或\"missing\"}，不得添加解释或代码围栏",
+          "expected": "2.5",
+          "kind": "supported",
+          "requiredSourceIds": [
+            "rule"
+          ]
+        }
+      ],
+      "documents": [
+        {
+          "id": "rule",
+          "text": "只有持续时间至少达到 2.5 秒才允许操作，正好 2.5 秒也允许。"
+        },
+        {
+          "id": "display",
+          "text": "界面按 1 秒粒度显示倒计时，显示刷新并不改变允许边界。"
+        }
+      ]
+    },
+    {
+      "id": "missing-quota",
+      "title": "资料未给出的上限核对",
+      "goals": [
+        {
+          "id": "quota",
+          "label": "每日提交次数上限；response只能是严格JSON {\"value\":字符串或null,\"kind\":\"supported\"或\"conflict\"或\"missing\"}，不得添加解释或代码围栏",
+          "expected": null,
+          "kind": "missing",
+          "requiredSourceIds": []
+        }
+      ],
+      "documents": [
+        {
+          "id": "stats",
+          "text": "昨天有 62 次提交记录，其中失败 8 次。"
+        },
+        {
+          "id": "guide",
+          "text": "提交页面会展示历史记录，本资料没有规定每日提交次数上限。"
+        }
+      ]
+    },
+    {
+      "id": "two-goals",
+      "title": "两个目标与跨来源核对",
+      "goals": [
+        {
+          "id": "age",
+          "label": "保留天数；response只能是严格JSON {\"value\":字符串或null,\"kind\":\"supported\"或\"conflict\"或\"missing\"}，不得添加解释或代码围栏",
+          "expected": "31",
+          "kind": "supported",
+          "requiredSourceIds": [
+            "retention"
+          ]
+        },
+        {
+          "id": "batch",
+          "label": "处理批量条数；response只能是严格JSON {\"value\":字符串或null,\"kind\":\"supported\"或\"conflict\"或\"missing\"}，不得添加解释或代码围栏",
+          "expected": "19",
+          "kind": "supported",
+          "requiredSourceIds": [
+            "batch"
+          ]
+        }
+      ],
+      "documents": [
+        {
+          "id": "retention",
+          "text": "记录保留 31 天。"
+        },
+        {
+          "id": "batch",
+          "text": "每批处理 19 条记录。"
+        },
+        {
+          "id": "ui",
+          "text": "界面可同时显示 8 个卡片，与处理批量无关。"
+        }
+      ]
+    },
+    {
+      "id": "unicode-offset",
+      "title": "特殊字符与数字原文核对",
+      "goals": [
+        {
+          "id": "period",
+          "label": "同步间隔秒数；response只能是严格JSON {\"value\":字符串或null,\"kind\":\"supported\"或\"conflict\"或\"missing\"}，不得添加解释或代码围栏",
+          "expected": "13",
+          "kind": "supported",
+          "requiredSourceIds": [
+            "unicode"
+          ]
+        }
+      ],
+      "documents": [
+        {
+          "id": "unicode",
+          "text": "🔎 展示说明。\n同步间隔为 13 秒。\n不要将展示年份2026作为间隔。"
+        },
+        {
+          "id": "log",
+          "text": "事件编号 88 是历史序号，不是同步间隔。"
+        }
+      ]
+    },
+    {
+      "id": "scope-english",
+      "title": "英文个人范围核对",
+      "goals": [
+        {
+          "id": "quota",
+          "label": "Personal account daily quota；response只能是严格JSON {\"value\":字符串或null,\"kind\":\"supported\"或\"conflict\"或\"missing\"}，不得添加解释或代码围栏",
+          "expected": "4",
+          "kind": "supported",
+          "requiredSourceIds": [
+            "personal"
+          ]
+        }
+      ],
+      "documents": [
+        {
+          "id": "personal",
+          "text": "Personal accounts have a daily quota of 4 submissions."
+        },
+        {
+          "id": "team",
+          "text": "Team accounts have a daily quota of 40 submissions. This rule does not apply to personal accounts."
+        },
+        {
+          "id": "ui",
+          "text": "The dashboard lists 12 recent rows; this is not a quota."
+        }
+      ]
+    }
+  ]
+}

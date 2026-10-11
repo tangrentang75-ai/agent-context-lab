@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "createdAt": "2026-10-06T05:18:15.933Z",
+  "scope": "预先登记的开发链路检验，不得用来宣称新题泛化",
+  "sourceHashes": {
+    "execution-study.cjs": "1711f6339bcf423304519949779ba5429782069dddef5abed079a3575f90c715",
+    "execution-study-fixtures.json": "ddad1b8497429221b4d165ddc57d6202f24bdd5a94eb11d33a2b14a9e08378fc",
+    "task-executor.cjs": "a4ee1def773df81230ab6e4e2f0ac4531f733a30a4d0192730fea77ae7b36841",
+    "task-ledger.js": "6dc9850928001dceacea37476c6c4de9a5c7761be8d7ba945befe724c3e1fe9f",
+    "resource-decision.js": "119849fcd81efb092b5bfcf4dbcf605dfc04006f94248bf7bd96a24f02b7192f",
+    "review-bundles.js": "478a029fdec9aed1891aae784a3f4da9bc2a06c397941818390dbb44687f53e0",
+    "review-passages.js": "912b879919bb278b5423210c47bed7dc4ada586b3d3613464bccbe533fd770f8",
+    "codex-bridge.cjs": "dcc2477c72a60f1c797e0ff72f5a2e2ef37613c75487575468e6700015a9c833",
+    "codex-response.cjs": "912f8b6478cbbbc3e7285473a0a6c78c1087086517a8f5c0dacb7e56b65f6dc6",
+    "jsonl-reader.cjs": "8bb32e9825b932179e9e74c3f9c66cdbf30ad2a16b3f8cae2ea3bcf37e7ac307"
+  }
+}

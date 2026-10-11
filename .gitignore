@@ -10,6 +10,11 @@ data/private/
 runs/
 artifacts/
 
+# Local project reviews and fieldwork materials (not public source fixtures)
+/银龄净网*.json
+/银龄净网*报告*.md
+/银龄净网下一轮验证包/
+
 # Dependencies and generated output
 node_modules/
 dist/
