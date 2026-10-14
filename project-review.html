@@ -44,7 +44,7 @@
         <p>计划保存在当前浏览器，请导出备份。校验值只能核对内容，不是数字签名或可信时间证明。CSV不会自动上传或保存；记录真实性仍需人工核对。</p><p id="observation-notice" role="status"></p><div id="observation-results"></div>
       </details>
     </section>
-    <footer><p>任务罗盘 · 项目体检 v0.23.0<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除本页保存的导入记录</button></footer>
+    <footer><p>任务罗盘 · 项目体检 v0.23.1<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除本页保存的导入记录</button></footer>
   </main>
   <dialog id="project-builder" aria-labelledby="builder-title">
     <div class="heading"><h2 id="builder-title">先说清楚，这个项目要做到什么</h2><button id="builder-close" type="button">关闭新项目窗口</button></div>
@@ -78,6 +78,8 @@
     <details id="edit-source-box"><summary>为本项新增或替换引用</summary><p class="fine">留空则保留原引用。填写后会用这一份证据替换本项原引用；其他检查项不受影响。</p>
       <div class="edit-grid"><label>来源标题<input id="edit-source-title" maxlength="200"></label><label>证据类型<select id="edit-source-kind"><option value="document">方案与材料</option><option value="desktop">电脑测试</option><option value="device">设备实测记录</option><option value="participant">参与者观察记录</option></select></label><label>证据日期<input id="edit-source-date" type="date"></label><label>证据对应版本<input id="edit-source-version" maxlength="120"></label><label>原记录的位置<input id="edit-source-locator" maxlength="500" placeholder="文件名、记录编号或章节"></label></div>
       <label>原文节选<textarea id="edit-source-text" maxlength="16000" rows="4" placeholder="仅粘贴本项需要的原文，不包含个人账号、联系方式或私人页面"></textarea></label>
+      <label>原文件校验值（可选，SHA-256）<input id="edit-source-sha256" maxlength="64" spellcheck="false" placeholder="已有的64位校验值；没有可留空" aria-describedby="source-hash-help"></label>
+      <p id="source-hash-help" class="fine">填写来源方或先前记录中已保存的校验值，之后可选择原文件核对。它不是证明材料真实的签名；网页不会自动生成一个值再与自身比较。</p>
       <label>支持本项的连续原句<textarea id="edit-source-quote" maxlength="3000" rows="2" placeholder="必须能在上面的节选中找到"></textarea></label>
     </details>
     <div class="edit-grid"><label>下一步动作<input id="edit-next-action" maxlength="500"></label><label>负责角色<input id="edit-next-owner" maxlength="200"></label><label>验证方法<textarea id="edit-next-method" maxlength="1500" rows="3"></textarea></label><label>完成时应取得的证据<textarea id="edit-next-done" maxlength="1500" rows="3"></textarea></label><label>优先级<select id="edit-next-priority"><option value="now">优先处理</option><option value="next">随后验证</option><option value="later">条件具备后开展</option></select></label></div>

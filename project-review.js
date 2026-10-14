@@ -127,7 +127,10 @@
     for (const c of result.rows) {
       out += '## '+clean(c.label)+'\n\n'+statuses[c.status]+' · '+(c.required?'必需':'补充')+'\n\n'+clean(c.summary)+'\n\n';
       if(c.issues.length) out += '引用问题：'+c.issues.map(clean).join('；')+'。\n\n';
-      for (const ref of c.refs) out += '> '+clean(ref.quote)+'\n\n来源：'+clean(ref.evidence.locator)+'；'+ref.evidence.date+'；'+clean(ref.evidence.version)+'。\n\n';
+      for (const ref of c.refs) {
+        out += '> '+clean(ref.quote)+'\n\n来源：'+clean(ref.evidence.locator)+'；'+ref.evidence.date+'；'+clean(ref.evidence.version)+'。\n\n';
+        if(ref.evidence.sha256)out += '原文件 SHA-256（提交者预留）：`'+ref.evidence.sha256+'`。报告未携带当前页面的临时文件核对结果；该值不证明来源真实或结论成立。\n\n';
+      }
       if(c.status !== 'pass') out += '下一步：'+clean(c.next.action)+'。由'+clean(c.next.owner)+'负责。\n\n方法：'+clean(c.next.method)+'\n\n完成证据：'+clean(c.next.doneWhen)+'\n\n';
     }
     return out;

@@ -108,7 +108,7 @@
   $('export-review').addEventListener('click',()=>download(current().id+'.json',JSON.stringify(current(),null,2),'application/json'));
   $('export-dataset').addEventListener('click',()=>download(current().id+'-验收导入.json',JSON.stringify(R.toDataset(current()),null,2),'application/json'));
   let draft=null,editedId='',draftBase=null;
-  const sourceInputs=['title','date','version','locator','text','quote'];
+  const sourceInputs=['title','date','version','locator','text','quote','sha256'];
   function showCriterion(){
     const c=draft.criteria.find(c=>c.id===editedId);
     $('edit-status').value=c.status;$('edit-summary').value=c.summary;
@@ -125,6 +125,7 @@
     let added;
     if(newEvidence){
       added={id:'source-'+crypto.randomUUID(),title:$('edit-source-title').value,kind:$('edit-source-kind').value,date:$('edit-source-date').value,version:$('edit-source-version').value,locator:$('edit-source-locator').value,text:$('edit-source-text').value};
+      const sha=$('edit-source-sha256').value.trim().toLowerCase();if(sha){if(!/^[a-f0-9]{64}$/.test(sha))throw Error('原文件校验值应为64位十六进制字符；没有已有校验值时可留空。');added.sha256=sha;}
       const quote=$('edit-source-quote').value;
       if(!quote.trim()||!added.text.includes(quote))throw Error('支持本项的原句必须完整出现在原文节选中。');
       updated.refs=[{evidenceId:added.id,quote}];

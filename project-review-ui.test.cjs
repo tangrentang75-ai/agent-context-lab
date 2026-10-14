@@ -64,3 +64,10 @@ test('超限文件在读取前拒绝，读取失败不保留先前匹配状态',
   const h=harness();await tick();await h.import(file(evidenceRecord()));await checkFile(h,sourceFile('synthetic source'));let read=false;await checkFile(h,{name:'large',size:20*1024*1024+1,arrayBuffer:()=>{read=true;}});assert.equal(read,false);assert.match(h.get('criteria').textContent,/超过20MiB/);assert.ok(!h.get('criteria').textContent.includes('校验值一致'));
   await checkFile(h,{name:'unreadable',size:1,arrayBuffer:async()=>{throw Error('read failed');}});assert.match(h.get('criteria').textContent,/核对未完成.*read failed/);
 });
+async function prepareNewEvidence(h,sha){await h.get('new-round').click();h.get('edit-date').value='2026-10-14';h.get('edit-reviewer').value='软件测试';h.get('edit-scope').value='仅验证填写和保存';for(const [k,v] of Object.entries({title:'新测试来源',date:'2026-10-14',version:'test',locator:'synthetic.txt',text:'synthetic source',quote:'synthetic source',sha256:sha}))h.get('edit-source-'+k).value=v;}
+test('新增证据可保存既有校验值，规范化大小写与外侧空格，旧轮次不变',async()=>{
+  const h=harness();await tick();await h.import(file(record('base')));const before=JSON.parse(h.storage.get(KEY))[0];await prepareNewEvidence(h,' A'+'B'.repeat(63)+' ');await h.get('editor-save').click();const saved=JSON.parse(h.storage.get(KEY));assert.equal(saved.length,2);assert.deepEqual(saved[0],before);assert.equal(saved[1].evidence[0].sha256,'a'+'b'.repeat(63));assert.equal(saved[1].criteria[0].status,'unknown');assert.match(h.get('criteria').textContent,/尚未核对/);
+});
+test('无校验值仍可保存来源；错误值不保存且保留可修改草稿',async()=>{
+  const h=harness();await tick();await h.import(file(record('base')));await prepareNewEvidence(h,'invalid hash');await h.get('editor-save').click();assert.equal(JSON.parse(h.storage.get(KEY)).length,1);assert.equal(h.get('editor').open,true);assert.match(h.get('editor-notice').textContent,/64位/);assert.equal(h.get('edit-source-text').value,'synthetic source');h.get('edit-source-sha256').value='';await h.get('editor-save').click();const saved=JSON.parse(h.storage.get(KEY));assert.equal(saved.length,2);assert.equal(saved[1].evidence[0].sha256,undefined);assert.ok(!h.get('criteria').textContent.includes('选择原文件核对'));
+});
