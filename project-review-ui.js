@@ -65,7 +65,7 @@
     const generation=++selectionEpoch;
     $('load-local').disabled=true;
     try{const response=await fetch('/api/project-review',{cache:'no-store'});if(!response.ok){let message='读取失败';try{message=(await response.json()).error||message;}catch{}throw Error(message);}const data=await response.json();addRecords([...(data.baseline?[data.baseline]:[]),data.current]);if(generation===selectionEpoch){selected=data.current.id;baseline=data.baseline?.id||'';notice('已读取本机保存的审阅结果。没有发起模型调用或设备测试。'+(storageBlocked?' 导入保存区不可写，需单独处理。':''));}render();}
-    catch(e){if(!selected)selected=records.at(-1)?.id||'';render();notice(e.message+'。可导入已导出的检查数据。',true);}finally{$('load-local').disabled=false;}
+    catch(e){if(!selected)selected=records.at(-1)?.id||'';render();if(generation===selectionEpoch)notice(e.message+'。可导入已导出的检查数据。',true);}finally{$('load-local').disabled=false;}
   }
   $('load-local').addEventListener('click',load);
   $('record-select').addEventListener('change',()=>{selectionEpoch++;selected=$('record-select').value;render();});
@@ -73,8 +73,8 @@
   $('status-filter').addEventListener('change',render);$('review-search').addEventListener('input',render);
   $('import-review').addEventListener('click',()=>$('review-file').click());
   $('review-file').addEventListener('change',async event=>{
-    const file=event.target.files[0];event.target.value='';if(!file)return;
-    try{if(file.size>2000000)throw Error('文件超过2MB');const record=R.validate(JSON.parse(await file.text()));const existing=records.find(r=>r.id===record.id);if(existing&&!same(existing,record))throw Error('相同编号已有不同内容，请给修订记录设置新编号。');persist(record);addRecords([record]);selectionEpoch++;selected=record.id;render();notice('导入成功，已保存在当前浏览器。内容来自导入者，未独立验证原始记录。');}catch(e){notice('导入未完成：'+e.message,true);}
+    const file=event.target.files[0];event.target.value='';if(!file)return;const generation=++selectionEpoch;
+    try{if(file.size>2000000)throw Error('文件超过2MB');const text=await file.text();if(generation!==selectionEpoch)return;const record=R.validate(JSON.parse(text));const existing=records.find(r=>r.id===record.id);if(existing&&!same(existing,record))throw Error('相同编号已有不同内容，请给修订记录设置新编号。');persist(record);addRecords([record]);selected=record.id;render();notice('导入成功，已保存在当前浏览器。内容来自导入者，未独立验证原始记录。');}catch(e){if(generation===selectionEpoch)notice('导入未完成：'+e.message,true);}
   });
   $('export-report').addEventListener('click',()=>download(current().id+'.md',R.markdown(current()),'text/markdown;charset=utf-8'));
   $('export-review').addEventListener('click',()=>download(current().id+'.json',JSON.stringify(current(),null,2),'application/json'));
@@ -109,6 +109,7 @@
     sourceInputs.forEach(k=>$('edit-source-'+k).value='');
   }
   $('new-round').addEventListener('click',()=>{
+    selectionEpoch++;
     draftBase=current();draft=R.newRound(draftBase,{id:'review-'+crypto.randomUUID(),date:new Date().toLocaleDateString('sv-SE')});editedId=draft.criteria[0].id;
     $('edit-date').value=draft.date;$('edit-version').value=draft.version;$('edit-reviewer').value='';$('edit-scope').value='';
     $('edit-criterion').replaceChildren(...draft.criteria.map(c=>option(c.id,c.label)));$('edit-criterion').value=editedId;
@@ -142,6 +143,7 @@
     box.append(legend,grid,remove);$('builder-goals').append(box);goalRows.push(row);goalCount();
   }
   $('create-project').addEventListener('click',()=>{
+    selectionEpoch++;
     for(const id of ['name','version','reviewer','scope','owner'])$('builder-'+id).value='';
     $('builder-date').value=new Date().toLocaleDateString('sv-SE');$('builder-limitations').value='尚未取得检查证据；建立清单不等于验收通过。';
     goalRows=[];goalCounter=0;$('builder-goals').replaceChildren();addGoal();$('builder-notice').textContent='先填写项目和具体检查项。关闭窗口不保存未提交内容。';$('project-builder').showModal();

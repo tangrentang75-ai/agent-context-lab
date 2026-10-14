@@ -1,0 +1,47 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),R=require('./project-review.js');
+const KEY='acl-project-reviews-v1';
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
+function record(id='original'){return R.createProject({id,projectId:'project-one',title:id,date:'2026-10-14',version:'test',scope:'仅软件测试',reviewer:'测试',owner:'测试角色',limitations:['不是实际项目验收'],goals:[{label:'软件测试目标',kind:'desktop',required:true,versionPolicy:'current',method:'自动检查',doneWhen:'保存测试日志'}]});}
+// Minimal DOM doubles for event/state unit tests; this does not automate a browser.
+function harness({storage=new Map(),fetcher}={}){
+  const nodes=new Map();let serial=0;
+  class Element{
+    constructor(tag='div'){this.tagName=tag;this.children=[];this.listeners={};this.value='';this.disabled=false;this.hidden=false;this.open=false;this._text='';this.classes=new Set();this.classList={toggle:(name,on)=>on?this.classes.add(name):this.classes.delete(name)};}
+    set id(v){this._id=v;nodes.set(v,this);}get id(){return this._id;}
+    set textContent(v){this._text=String(v);this.children=[];}get textContent(){return this._text+this.children.map(c=>c.textContent||'').join('');}
+    append(...children){this.children.push(...children);children.forEach(c=>c.parent=this);if(this.tagName==='select'&&!this.value&&children.length)this.value=children[0].value;}
+    replaceChildren(...children){this._text='';this.children=[];this.append(...children);}
+    addEventListener(type,fn){(this.listeners[type]??=[]).push(fn);}
+    async emit(type,event={target:this}){for(const fn of this.listeners[type]||[])await fn(event);}
+    click(){return this.emit('click');}showModal(){this.open=true;}close(){this.open=false;}
+    remove(){if(this.parent)this.parent.children=this.parent.children.filter(c=>c!==this);}
+  }
+  const html=fs.readFileSync(path.join(__dirname,'project-review.html'),'utf8');for(const m of html.matchAll(/<(\w+)[^>]*\bid="([^"]+)"/g)){const e=new Element(m[1]);e.id=m[2];}
+  nodes.get('status-filter').value='all';
+  const get=id=>{const e=nodes.get(id);if(!e)throw Error('Missing DOM id '+id);return e;};
+  const localStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)};
+  const context={window:{ProjectReview:R},document:{getElementById:get,createElement:tag=>new Element(tag)},localStorage,fetch:fetcher||(()=>Promise.resolve({ok:false,json:async()=>({error:'无本地案例'})})),crypto:{randomUUID:()=>`synthetic-${++serial}`},structuredClone,Date,URL:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}},Blob,setTimeout,confirm:()=>false};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname,'project-review-ui.js'),'utf8'),context,{filename:'project-review-ui.js'});
+  return {get,storage,import:async file=>get('review-file').emit('change',{target:{files:[file],value:'file'}})};
+}
+const file=r=>({size:100,text:async()=>JSON.stringify(r)});
+test('后选择的导入先完成时，迟到旧文件不改变选择或写入保存区',async()=>{
+  const h=harness();await tick();const slow=deferred(),pending=h.import({size:100,text:()=>slow.promise});await h.import(file(record('newer')));slow.resolve(JSON.stringify(record('older')));await pending;
+  assert.equal(h.get('record-select').value,'newer');assert.deepEqual(JSON.parse(h.storage.get(KEY)).map(r=>r.id),['newer']);
+});
+test('用户切换已保存记录后，迟到导入不覆盖选择和成功消息',async()=>{
+  const h=harness({storage:new Map([[KEY,JSON.stringify([record('existing')])]])});await tick();const slow=deferred(),pending=h.import({size:100,text:()=>slow.promise});h.get('record-select').value='existing';await h.get('record-select').emit('change');const message=h.get('notice').textContent;slow.reject(Error('旧文件读取失败'));await pending;
+  assert.equal(h.get('record-select').value,'existing');assert.equal(h.get('notice').textContent,message);assert.equal(JSON.parse(h.storage.get(KEY)).length,1);
+});
+test('后台本地读取失败不得覆盖更晚导入成功的消息',async()=>{
+  const slow=deferred(),h=harness({fetcher:()=>slow.promise});await h.import(file(record('imported')));const message=h.get('notice').textContent;slow.reject(Error('late network error'));await tick();assert.equal(h.get('notice').textContent,message);assert.equal(h.get('record-select').value,'imported');
+});
+test('两个页面同时保存时拒绝旧快照覆盖，保留另一页的新记录',async()=>{
+  const shared=new Map([[KEY,JSON.stringify([record('base')])]]),a=harness({storage:shared}),b=harness({storage:shared});await tick();await a.import(file(record('from-a')));await b.import(file(record('from-b')));
+  assert.deepEqual(JSON.parse(shared.get(KEY)).map(r=>r.id),['base','from-a']);assert.match(b.get('notice').textContent,/另一页面/);assert.notEqual(b.get('record-select').value,'from-b');
+});
+test('损坏保存区不会被一次导入静默重置',async()=>{const storage=new Map([[KEY,'{broken']]),h=harness({storage});await tick();await h.import(file(record('new')));assert.equal(storage.get(KEY),'{broken');assert.match(h.get('notice').textContent,/不可写/);});
+test('重复编号不同内容拒绝，原内容与当前记录保持不变',async()=>{const h=harness();await tick();await h.import(file(record('same')));const changed=record('same');changed.title='changed';await h.import(file(changed));assert.equal(JSON.parse(h.storage.get(KEY))[0].title,'same');assert.equal(h.get('review-title').textContent,'same');assert.match(h.get('notice').textContent,/不同内容/);});
+test('开始编辑之后，先前尚未完成的导入不能写入或换掉编辑基线',async()=>{const h=harness();await tick();await h.import(file(record('base')));const slow=deferred(),pending=h.import({size:100,text:()=>slow.promise});await h.get('new-round').click();slow.resolve(JSON.stringify(record('late')));await pending;assert.equal(h.get('editor').open,true);assert.equal(h.get('record-select').value,'base');assert.deepEqual(JSON.parse(h.storage.get(KEY)).map(r=>r.id),['base']);});
