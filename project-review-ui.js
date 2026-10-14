@@ -2,6 +2,8 @@
 (() => {
   const R=window.ProjectReview,$=id=>document.getElementById(id),KEY='acl-project-reviews-v1';
   let records=[],selected='',baseline=null,saved=[],savedRaw=null,storageBlocked=false,selectionEpoch=0;
+  const fileChecks=new Map(),fileCheckNodes=new Map(),fileCheckEpochs=new Map();let requestedFileCheck=null;
+  function showFileCheck(key){for(const el of fileCheckNodes.get(key)||[])el.textContent=fileChecks.get(key)||'本页尚未核对原文件。最大20MiB，仅在本机计算，不上传文件。';}
   function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
   function notice(message,error=false){$('notice').textContent=message;$('notice').classList.toggle('error',error);}
   function option(value,label){const el=node('option',label);el.value=value;return el;}
@@ -33,6 +35,7 @@
     $('baseline-select').replaceChildren(option('','不比较'),...choices.map(r=>option(r.id,r.date+' · '+r.version+'（'+r.reviewer+'）')));$('baseline-select').value=baseline;
   }
   function render(){
+    fileCheckNodes.clear();
     fillSelectors();const c=current();$('result').hidden=!c;$('empty').hidden=!!c;
     for(const id of ['new-round','export-report','export-review','export-dataset'])$(id).disabled=!c;
     if(!c)return;
@@ -49,7 +52,18 @@
       const d=node('details',undefined,'criteria-card'),s=node('summary');s.append(node('span',r.label),node('span',R.statuses[r.status],'pill '+r.status));d.append(s,node('p',r.summary),node('p',(r.required?'必需项':'补充项')+' · 接受 '+r.kinds.map(k=>R.kinds[k]).join(' / ')+' · '+(r.versionPolicy==='current'?'需要当前版本证据':'允许跨版本材料'),'fine'));
       if(r.issues.length)d.append(node('p','暂不采纳原判断：'+r.issues.join('；'),'problem'));
       if(!r.refs.length)d.append(node('p','尚无引用。补齐对应类型的实际证据后，再重新审阅。','fine'));
-      for(const ref of r.refs){const box=node('div',undefined,'source'),e=ref.evidence;box.append(node('strong',e.title),node('p',R.kinds[e.kind]+' · '+e.date+' · '+e.version),node('p','来源位置：'+e.locator),node('blockquote',ref.quote));if(e.sha256)box.append(node('p','原文件 SHA-256（提交者提供，网页未重新读取原文件）'),node('code',e.sha256));if(!ref.valid)box.append(node('p',ref.issues.join('；'),'problem'));d.append(box);}
+      for(const ref of r.refs){
+        const box=node('div',undefined,'source'),e=ref.evidence;
+        box.append(node('strong',e.title),node('p',R.kinds[e.kind]+' · '+e.date+' · '+e.version),node('p','来源位置：'+e.locator),node('blockquote',ref.quote));
+        if(e.sha256){
+          const key=JSON.stringify([c.id,e.id,e.sha256]),button=node('button','选择原文件核对 · '+e.title,'quiet'),status=node('p',undefined,'fine');
+          button.type='button';status.setAttribute('role','status');
+          button.addEventListener('click',()=>{requestedFileCheck={key,expected:e.sha256};$('evidence-file').click();});
+          fileCheckNodes.set(key,[...(fileCheckNodes.get(key)||[]),status]);showFileCheck(key);
+          box.append(node('p','原文件 SHA-256（提交者预留）'),node('code',e.sha256),button,status);
+        }
+        if(!ref.valid)box.append(node('p',ref.issues.join('；'),'problem'));d.append(box);
+      }
       return d;
     }));
     if(!visible.length)$('criteria').append(node('p','没有符合筛选条件的项目。'));
@@ -68,6 +82,20 @@
     catch(e){if(!selected)selected=records.at(-1)?.id||'';render();if(generation===selectionEpoch)notice(e.message+'。可导入已导出的检查数据。',true);}finally{$('load-local').disabled=false;}
   }
   $('load-local').addEventListener('click',load);
+  $('evidence-file').addEventListener('change',async event=>{
+    const file=event.target.files[0],request=requestedFileCheck;event.target.value='';requestedFileCheck=null;
+    if(!file||!request)return;
+    const {key,expected}=request,epoch=(fileCheckEpochs.get(key)||0)+1;fileCheckEpochs.set(key,epoch);
+    const update=message=>{if(fileCheckEpochs.get(key)===epoch){fileChecks.set(key,message);showFileCheck(key);}};
+    update('正在本机核对所选文件……');
+    try{
+      const F=window.EvidenceFileCheck;if(!F)throw Error('校验模块未加载，请刷新重试。');
+      if(file.size>F.MAX_BYTES)throw Error('文件超过20MiB，未进行核对。');
+      const bytes=await file.arrayBuffer();if(fileCheckEpochs.get(key)!==epoch)return;
+      const result=await F.compare(expected,bytes);
+      update((result.status==='match'?'校验值一致':'校验值不一致')+' · '+file.name+' · '+result.bytes+' 字节。'+(result.status==='mismatch'?'所选文件 SHA-256：'+result.actual+'。':'')+result.limitation+' 本次核对仅在当前页面保留，不改变检查结论或导出记录。');
+    }catch(e){update('核对未完成：'+e.message+' 本项原文件仍未核实。');}
+  });
   $('record-select').addEventListener('change',()=>{selectionEpoch++;selected=$('record-select').value;render();});
   $('baseline-select').addEventListener('change',()=>{baseline=$('baseline-select').value;render();});
   $('status-filter').addEventListener('change',render);$('review-search').addEventListener('input',render);

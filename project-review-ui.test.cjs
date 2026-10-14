@@ -14,6 +14,7 @@ function harness({storage=new Map(),fetcher}={}){
     append(...children){this.children.push(...children);children.forEach(c=>c.parent=this);if(this.tagName==='select'&&!this.value&&children.length)this.value=children[0].value;}
     replaceChildren(...children){this._text='';this.children=[];this.append(...children);}
     addEventListener(type,fn){(this.listeners[type]??=[]).push(fn);}
+    setAttribute(name,value){this[name]=value;}
     async emit(type,event={target:this}){for(const fn of this.listeners[type]||[])await fn(event);}
     click(){return this.emit('click');}showModal(){this.open=true;}close(){this.open=false;}
     remove(){if(this.parent)this.parent.children=this.parent.children.filter(c=>c!==this);}
@@ -22,7 +23,7 @@ function harness({storage=new Map(),fetcher}={}){
   nodes.get('status-filter').value='all';
   const get=id=>{const e=nodes.get(id);if(!e)throw Error('Missing DOM id '+id);return e;};
   const localStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)};
-  const context={window:{ProjectReview:R},document:{getElementById:get,createElement:tag=>new Element(tag)},localStorage,fetch:fetcher||(()=>Promise.resolve({ok:false,json:async()=>({error:'无本地案例'})})),crypto:{randomUUID:()=>`synthetic-${++serial}`},structuredClone,Date,URL:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}},Blob,setTimeout,confirm:()=>false};
+  const context={window:{ProjectReview:R,EvidenceFileCheck:require('./evidence-file-check.js')},document:{getElementById:get,createElement:tag=>new Element(tag)},localStorage,fetch:fetcher||(()=>Promise.resolve({ok:false,json:async()=>({error:'无本地案例'})})),crypto:{randomUUID:()=>`synthetic-${++serial}`},structuredClone,Date,URL:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}},Blob,setTimeout,confirm:()=>false};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'project-review-ui.js'),'utf8'),context,{filename:'project-review-ui.js'});
   return {get,storage,import:async file=>get('review-file').emit('change',{target:{files:[file],value:'file'}})};
 }
@@ -45,3 +46,21 @@ test('两个页面同时保存时拒绝旧快照覆盖，保留另一页的新�
 test('损坏保存区不会被一次导入静默重置',async()=>{const storage=new Map([[KEY,'{broken']]),h=harness({storage});await tick();await h.import(file(record('new')));assert.equal(storage.get(KEY),'{broken');assert.match(h.get('notice').textContent,/不可写/);});
 test('重复编号不同内容拒绝，原内容与当前记录保持不变',async()=>{const h=harness();await tick();await h.import(file(record('same')));const changed=record('same');changed.title='changed';await h.import(file(changed));assert.equal(JSON.parse(h.storage.get(KEY))[0].title,'same');assert.equal(h.get('review-title').textContent,'same');assert.match(h.get('notice').textContent,/不同内容/);});
 test('开始编辑之后，先前尚未完成的导入不能写入或换掉编辑基线',async()=>{const h=harness();await tick();await h.import(file(record('base')));const slow=deferred(),pending=h.import({size:100,text:()=>slow.promise});await h.get('new-round').click();slow.resolve(JSON.stringify(record('late')));await pending;assert.equal(h.get('editor').open,true);assert.equal(h.get('record-select').value,'base');assert.deepEqual(JSON.parse(h.storage.get(KEY)).map(r=>r.id),['base']);});
+function evidenceRecord(){const r=record('with-source');r.evidence=[{id:'e1',title:'软件测试原文',kind:'desktop',date:r.date,version:r.version,locator:'synthetic.txt',text:'synthetic source',sha256:require('node:crypto').createHash('sha256').update('synthetic source').digest('hex')}];r.criteria[0].refs=[{evidenceId:'e1',quote:'synthetic source'}];return r;}
+function descendants(el){return [el,...el.children.flatMap(descendants)];}
+function sourceButton(h){return descendants(h.get('criteria')).find(n=>n.tagName==='button');}
+function sourceFile(text){const b=Buffer.from(text);return {name:'synthetic.txt',size:b.length,arrayBuffer:async()=>b};}
+async function checkFile(h,file){await sourceButton(h).click();return h.get('evidence-file').emit('change',{target:{files:[file],value:'file'}});}
+test('文件匹配不改检查结论和保存记录，重渲染保留本页状态但刷新不继承',async()=>{
+  const h=harness();await tick();await h.import(file(evidenceRecord()));const before=h.storage.get(KEY);const card=h.get('criteria').children[0];card.open=true;await checkFile(h,sourceFile('synthetic source'));
+  assert.match(h.get('criteria').textContent,/校验值一致/);assert.match(h.get('criteria').textContent,/不证明来源真实/);assert.equal(card.open,true);assert.equal(h.storage.get(KEY),before);assert.match(h.get('metrics').textContent,/1证据待补/);
+  await h.get('status-filter').emit('change');assert.match(h.get('criteria').textContent,/校验值一致/);
+  const fresh=harness({storage:h.storage});await tick();assert.match(fresh.get('criteria').textContent,/尚未核对/);
+});
+test('同一证据后选文件优先，迟到匹配不能覆盖较新的不匹配',async()=>{
+  const h=harness();await tick();await h.import(file(evidenceRecord()));const slow=deferred(),pending=checkFile(h,{name:'old',size:16,arrayBuffer:()=>slow.promise});await tick();await checkFile(h,sourceFile('changed'));slow.resolve(Buffer.from('synthetic source'));await pending;assert.match(h.get('criteria').textContent,/校验值不一致/);assert.ok(!h.get('criteria').textContent.includes('校验值一致'));
+});
+test('超限文件在读取前拒绝，读取失败不保留先前匹配状态',async()=>{
+  const h=harness();await tick();await h.import(file(evidenceRecord()));await checkFile(h,sourceFile('synthetic source'));let read=false;await checkFile(h,{name:'large',size:20*1024*1024+1,arrayBuffer:()=>{read=true;}});assert.equal(read,false);assert.match(h.get('criteria').textContent,/超过20MiB/);assert.ok(!h.get('criteria').textContent.includes('校验值一致'));
+  await checkFile(h,{name:'unreadable',size:1,arrayBuffer:async()=>{throw Error('read failed');}});assert.match(h.get('criteria').textContent,/核对未完成.*read failed/);
+});
