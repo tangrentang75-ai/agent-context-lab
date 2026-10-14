@@ -52,9 +52,12 @@
       const d=node('details',undefined,'criteria-card'),s=node('summary');s.append(node('span',r.label),node('span',R.statuses[r.status],'pill '+r.status));d.append(s,node('p',r.summary),node('p',(r.required?'必需项':'补充项')+' · 接受 '+r.kinds.map(k=>R.kinds[k]).join(' / ')+' · '+(r.versionPolicy==='current'?'需要当前版本证据':'允许跨版本材料'),'fine'));
       if(r.issues.length)d.append(node('p','暂不采纳原判断：'+r.issues.join('；'),'problem'));
       if(!r.refs.length)d.append(node('p','尚无引用。补齐对应类型的实际证据后，再重新审阅。','fine'));
-      for(const ref of r.refs){
-        const box=node('div',undefined,'source'),e=ref.evidence;
-        box.append(node('strong',e.title),node('p',R.kinds[e.kind]+' · '+e.date+' · '+e.version),node('p','来源位置：'+e.locator),node('blockquote',ref.quote));
+      const sources=new Map();
+      for(const ref of r.refs){const id=ref.evidence.id;if(!sources.has(id))sources.set(id,[]);sources.get(id).push(ref);}
+      for(const refs of sources.values()){
+        const box=node('div',undefined,'source'),e=refs[0].evidence;
+        box.append(node('strong',e.title),node('p',R.kinds[e.kind]+' · '+e.date+' · '+e.version),node('p','来源位置：'+e.locator));
+        for(const ref of refs){box.append(node('blockquote',ref.quote));if(!ref.valid)box.append(node('p',ref.issues.join('；'),'problem'));}
         if(e.sha256){
           const key=JSON.stringify([c.id,e.id,e.sha256]),button=node('button','选择原文件核对 · '+e.title,'quiet'),status=node('p',undefined,'fine');
           button.type='button';status.setAttribute('role','status');
@@ -62,7 +65,7 @@
           fileCheckNodes.set(key,[...(fileCheckNodes.get(key)||[]),status]);showFileCheck(key);
           box.append(node('p','原文件 SHA-256（提交者预留）'),node('code',e.sha256),button,status);
         }
-        if(!ref.valid)box.append(node('p',ref.issues.join('；'),'problem'));d.append(box);
+        d.append(box);
       }
       return d;
     }));
