@@ -1,7 +1,7 @@
 'use strict';
 (() => {
   const R=window.ProjectReview,$=id=>document.getElementById(id),KEY='acl-project-reviews-v1';
-  let records=[],selected='',baseline=null,saved=[],savedRaw=null,storageBlocked=false;
+  let records=[],selected='',baseline=null,saved=[],savedRaw=null,storageBlocked=false,selectionEpoch=0;
   function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
   function notice(message,error=false){$('notice').textContent=message;$('notice').classList.toggle('error',error);}
   function option(value,label){const el=node('option',label);el.value=value;return el;}
@@ -62,23 +62,24 @@
     for(const row of changes.rows){const tr=node('tr');for(const value of [row.label,R.statuses[row.before]||'—',R.statuses[row.after]||'—',row.change])tr.append(node('td',value));body.append(tr);}table.append(head,body);wrap.append(table);comp.append(wrap);
   }
   async function load(){
+    const generation=++selectionEpoch;
     $('load-local').disabled=true;
-    try{const response=await fetch('/api/project-review',{cache:'no-store'});if(!response.ok){let message='读取失败';try{message=(await response.json()).error||message;}catch{}throw Error(message);}const data=await response.json();addRecords([...(data.baseline?[data.baseline]:[]),data.current]);selected=data.current.id;baseline=data.baseline?.id||'';render();notice('已读取本机保存的审阅结果。没有发起模型调用或设备测试。'+(storageBlocked?' 导入保存区不可写，需单独处理。':''));}
+    try{const response=await fetch('/api/project-review',{cache:'no-store'});if(!response.ok){let message='读取失败';try{message=(await response.json()).error||message;}catch{}throw Error(message);}const data=await response.json();addRecords([...(data.baseline?[data.baseline]:[]),data.current]);if(generation===selectionEpoch){selected=data.current.id;baseline=data.baseline?.id||'';notice('已读取本机保存的审阅结果。没有发起模型调用或设备测试。'+(storageBlocked?' 导入保存区不可写，需单独处理。':''));}render();}
     catch(e){if(!selected)selected=records.at(-1)?.id||'';render();notice(e.message+'。可导入已导出的检查数据。',true);}finally{$('load-local').disabled=false;}
   }
   $('load-local').addEventListener('click',load);
-  $('record-select').addEventListener('change',()=>{selected=$('record-select').value;render();});
+  $('record-select').addEventListener('change',()=>{selectionEpoch++;selected=$('record-select').value;render();});
   $('baseline-select').addEventListener('change',()=>{baseline=$('baseline-select').value;render();});
   $('status-filter').addEventListener('change',render);$('review-search').addEventListener('input',render);
   $('import-review').addEventListener('click',()=>$('review-file').click());
   $('review-file').addEventListener('change',async event=>{
     const file=event.target.files[0];event.target.value='';if(!file)return;
-    try{if(file.size>2000000)throw Error('文件超过2MB');const record=R.validate(JSON.parse(await file.text()));const existing=records.find(r=>r.id===record.id);if(existing&&!same(existing,record))throw Error('相同编号已有不同内容，请给修订记录设置新编号。');persist(record);addRecords([record]);selected=record.id;render();notice('导入成功，已保存在当前浏览器。内容来自导入者，未独立验证原始记录。');}catch(e){notice('导入未完成：'+e.message,true);}
+    try{if(file.size>2000000)throw Error('文件超过2MB');const record=R.validate(JSON.parse(await file.text()));const existing=records.find(r=>r.id===record.id);if(existing&&!same(existing,record))throw Error('相同编号已有不同内容，请给修订记录设置新编号。');persist(record);addRecords([record]);selectionEpoch++;selected=record.id;render();notice('导入成功，已保存在当前浏览器。内容来自导入者，未独立验证原始记录。');}catch(e){notice('导入未完成：'+e.message,true);}
   });
   $('export-report').addEventListener('click',()=>download(current().id+'.md',R.markdown(current()),'text/markdown;charset=utf-8'));
   $('export-review').addEventListener('click',()=>download(current().id+'.json',JSON.stringify(current(),null,2),'application/json'));
   $('export-dataset').addEventListener('click',()=>download(current().id+'-验收导入.json',JSON.stringify(R.toDataset(current()),null,2),'application/json'));
-  let draft=null,editedId='';
+  let draft=null,editedId='',draftBase=null;
   const sourceInputs=['title','date','version','locator','text','quote'];
   function showCriterion(){
     const c=draft.criteria.find(c=>c.id===editedId);
@@ -108,7 +109,7 @@
     sourceInputs.forEach(k=>$('edit-source-'+k).value='');
   }
   $('new-round').addEventListener('click',()=>{
-    draft=R.newRound(current(),{id:'review-'+crypto.randomUUID(),date:new Date().toLocaleDateString('sv-SE')});editedId=draft.criteria[0].id;
+    draftBase=current();draft=R.newRound(draftBase,{id:'review-'+crypto.randomUUID(),date:new Date().toLocaleDateString('sv-SE')});editedId=draft.criteria[0].id;
     $('edit-date').value=draft.date;$('edit-version').value=draft.version;$('edit-reviewer').value='';$('edit-scope').value='';
     $('edit-criterion').replaceChildren(...draft.criteria.map(c=>option(c.id,c.label)));$('edit-criterion').value=editedId;
     $('editor-notice').textContent='请先填写本轮日期、版本、实际审阅方式和检查范围，再逐项更新。';showCriterion();$('editor').showModal();
@@ -119,11 +120,37 @@
   $('edit-version').addEventListener('input',syncVersion);
   $('edit-version').addEventListener('change',syncVersion);
   $('editor-save').addEventListener('click',()=>{try{
-    commitCriterion();if(draft.date<current().date)throw Error('新一轮日期不能早于原检查记录。');
+    commitCriterion();if(draft.date<draftBase.date)throw Error('新一轮日期不能早于原检查记录。');
     const referenced=new Set(draft.criteria.flatMap(c=>c.refs.map(r=>r.evidenceId)));
     draft.evidence=draft.evidence.filter(e=>referenced.has(e.id));draft=R.validate(draft);
-    persist(draft);const previous=selected;addRecords([draft]);selected=draft.id;baseline=previous;$('editor').close();render();notice('新一轮记录已保存到当前浏览器，旧记录保留。请导出检查数据留作备份。');
+    persist(draft);selectionEpoch++;addRecords([draft]);selected=draft.id;baseline=draftBase.id;$('editor').close();render();notice('新一轮记录已保存到当前浏览器，旧记录保留。请导出检查数据留作备份。');
   }catch(e){$('editor-notice').textContent='没有保存：'+e.message;}});
+  let goalRows=[],goalCounter=0;
+  function goalCount(){
+    $('builder-count').textContent=goalRows.length+' / 20项';$('builder-add').disabled=goalRows.length>=20;
+    goalRows.forEach(row=>row.remove.disabled=goalRows.length<=1);
+  }
+  function addGoal(){
+    if(goalRows.length>=20)return;const n=++goalCounter,box=node('fieldset'),legend=node('legend','检查项 '+n),grid=node('div',undefined,'edit-grid'),fields={};
+    function input(key,label,tag='input',max=200){const lab=node('label',label+' · 第'+n+'项'),el=node(tag);el.id='new-goal-'+n+'-'+key;if(tag==='textarea'){el.rows=2;el.maxLength=max;}else if(tag==='input')el.maxLength=max;lab.append(el);grid.append(lab);fields[key]=el;return el;}
+    input('label','希望做到什么').placeholder='例如：提交招领信息后能在列表中找到';
+    const kind=input('kind','需要哪类证据','select');Object.entries(R.kinds).forEach(([value,label])=>kind.append(option(value,label)));kind.value='desktop';
+    const version=input('versionPolicy','证据的版本要求','select');version.append(option('current','需要当前版本证据'),option('any','允许跨版本材料'));
+    const required=input('required','是否必须做到','select');required.append(option('true','必需项'),option('false','补充项'));
+    input('method','准备怎么验证','textarea',1500);input('doneWhen','要留下什么结果才能判断','textarea',1500);
+    const remove=node('button','移除第'+n+'项');remove.type='button';const row={box,fields,remove};remove.addEventListener('click',()=>{if(goalRows.length<=1)return;goalRows=goalRows.filter(r=>r!==row);box.remove();goalCount();});
+    box.append(legend,grid,remove);$('builder-goals').append(box);goalRows.push(row);goalCount();
+  }
+  $('create-project').addEventListener('click',()=>{
+    for(const id of ['name','version','reviewer','scope','owner'])$('builder-'+id).value='';
+    $('builder-date').value=new Date().toLocaleDateString('sv-SE');$('builder-limitations').value='尚未取得检查证据；建立清单不等于验收通过。';
+    goalRows=[];goalCounter=0;$('builder-goals').replaceChildren();addGoal();$('builder-notice').textContent='先填写项目和具体检查项。关闭窗口不保存未提交内容。';$('project-builder').showModal();
+  });
+  $('builder-add').addEventListener('click',addGoal);$('builder-close').addEventListener('click',()=>$('project-builder').close());
+  $('builder-save').addEventListener('click',()=>{try{
+    const record=R.createProject({id:'review-'+crypto.randomUUID(),projectId:'project-'+crypto.randomUUID(),title:$('builder-name').value,date:$('builder-date').value,version:$('builder-version').value,reviewer:$('builder-reviewer').value,scope:$('builder-scope').value,owner:$('builder-owner').value,limitations:$('builder-limitations').value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean),goals:goalRows.map(({fields:f})=>({label:f.label.value,kind:f.kind.value,required:f.required.value==='true',versionPolicy:f.versionPolicy.value,method:f.method.value,doneWhen:f.doneWhen.value}))});
+    persist(record);addRecords([record]);selectionEpoch++;selected=record.id;baseline='';$('status-filter').value='all';$('review-search').value='';$('project-builder').close();render();notice('新项目清单已保存，所有检查项均为证据待补。请导出检查数据备份，取得实际记录后再新增一轮检查。');
+  }catch(e){$('builder-notice').textContent='没有建立清单：'+e.message;}});
   $('clear-saved').addEventListener('click',()=>{if(!confirm('只清除本页在浏览器保存的导入记录。请先导出需要保留的数据；不会删除电脑源文件。'))return;try{localStorage.removeItem(KEY);saved=[];savedRaw=null;storageBlocked=false;notice('浏览器保存区已清除。当前已打开的记录仍可查看和导出，刷新后不再恢复。');}catch(e){notice('清除失败：'+e.message,true);}});
   $('template').addEventListener('click',()=>{
     const date=new Date().toLocaleDateString('sv-SE');

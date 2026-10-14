@@ -53,6 +53,15 @@
     }
     return out;
   }
+  function createProject(fields) {
+    if(!fields||!Array.isArray(fields.goals)||fields.goals.length<1||fields.goals.length>20)throw Error('请建立1—20个检查项');
+    const seen=new Set(),criteria=fields.goals.map((g,i)=>{
+      if(!g||typeof g.label!=='string'||!g.label.trim())throw Error('检查项名称不能为空');
+      const label=g.label.trim();if(seen.has(label))throw Error('检查项名称重复，请说明各项具体区别');seen.add(label);
+      return {id:'goal-'+(i+1),label,required:g.required,kinds:[g.kind],versionPolicy:g.versionPolicy,status:'unknown',summary:'刚建立检查清单，尚未取得支持结论的证据。',refs:[],next:{action:'收集“'+label+'”的验证记录',owner:fields.owner,method:g.method,doneWhen:g.doneWhen,priority:'now'}};
+    });
+    return validate({schema:'project-review-v1',id:fields.id,projectId:fields.projectId,title:fields.title,date:fields.date,version:fields.version,scope:fields.scope,reviewer:fields.reviewer,limitations:fields.limitations,evidence:[],criteria});
+  }
   function assess(input) {
     const review = validate(input), evidence = new Map(review.evidence.map(e => [e.id, e]));
     const rows = review.criteria.map(c => {
@@ -123,7 +132,7 @@
     }
     return out;
   }
-  const api = { kinds, statuses, validate, assess, newRound, compare, toDataset, markdown };
+  const api = { kinds, statuses, validate, createProject, assess, newRound, compare, toDataset, markdown };
   if(typeof module==='object' && module.exports) module.exports=api;
   root.ProjectReview=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
