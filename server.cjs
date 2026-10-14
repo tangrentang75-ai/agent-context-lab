@@ -17,6 +17,7 @@ const allowed = {'/':'index.html','/index.html':'index.html','/styles.css':'styl
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
 Object.assign(allowed, {'/project-review.html':'project-review.html','/project-review.js':'project-review.js','/project-review-ui.js':'project-review-ui.js','/project-review.css':'project-review.css'});
 Object.assign(allowed, {'/observation-audit.js':'observation-audit.js','/observation-audit-ui.js':'observation-audit-ui.js'});
+Object.assign(allowed, {'/observation-plan.js':'observation-plan.js'});
 const port = Number(process.env.PORT || 4173);
 function createServer(executor=bridge,{passageReader=latestPassageStudy,taskExecutor=taskExecution,projectReviewReader=readReview}={}) {
 let running=false;

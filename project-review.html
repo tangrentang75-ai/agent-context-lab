@@ -5,7 +5,7 @@
   <title>项目体检 · 任务罗盘</title>
   <link rel="stylesheet" href="project-review.css">
   <script defer src="project-review.js"></script><script defer src="project-review-ui.js"></script>
-  <script defer src="observation-audit.js"></script><script defer src="observation-audit-ui.js"></script>
+  <script defer src="observation-plan.js"></script><script defer src="observation-audit.js"></script><script defer src="observation-audit-ui.js"></script>
 </head>
 <body>
   <a class="skip" href="#content">跳到检查结果</a>
@@ -18,13 +18,30 @@
     <div id="result" hidden>
       <section class="overview"><div class="summary"><p class="eyebrow" id="review-date"></p><h2 id="review-title"></h2><p id="review-scope"></p><p id="verdict" class="verdict"></p><p id="review-origin" class="fine"></p></div><div id="metrics" class="metrics" aria-label="检查项统计"></div></section>
       <div class="explanation"><strong>通过的是具体检查项，不是整个产品。</strong><p>引文、证据类型与版本可以核对；记录真实性和结论是否成立仍需人工复核。这里不自动批准上线，也不把缺失证据算成失败率。</p></div>
-      <details class="boundaries observation-panel"><summary>准备下一轮广告观察 · 下载空表并检查缺项</summary><p>空白、未知和截图缺失不会算成“0个广告”。两组条件不同、任务未完成或出现错误页，会单独标出。数据只在浏览器读取。</p><div class="actions"><button id="observation-template">下载8轮空表</button><button id="observation-import">检查填写后的CSV</button><button id="observation-export" disabled>导出观察表检查</button><input id="observation-file" type="file" accept=".csv,text/csv" hidden></div><p id="observation-notice" role="status"></p><div id="observation-results"></div></details>
+      <details class="boundaries observation-panel"><summary>准备下一轮广告观察 · 建计划、填记录、查遗漏</summary>
+        <p>先保存原定计划，再填写实际记录。即使表格里删掉了某一轮，也能查出遗漏。空白和未知不会算成“0个广告”。</p>
+        <label for="observation-plan-select">用于核对的独立计划</label><select id="observation-plan-select"><option value="">未选择独立计划</option></select>
+        <p id="observation-plan-status" role="status" style="overflow-wrap:anywhere"></p>
+        <details id="observation-plan-editor"><summary>建立一份8轮观察计划</summary><div class="edit-grid">
+          <label>计划名称<input id="plan-title" maxlength="200"></label>
+          <label>银龄净网版本<input id="plan-software" maxlength="120"></label>
+          <label>被测软件版本<input id="plan-app" maxlength="120"></label>
+          <label>手机代号<input id="plan-device" maxlength="120" placeholder="例如：测试机A，无需序列号"></label>
+          <label>网络条件<input id="plan-network" maxlength="120"></label>
+          <label>任务编号<input id="plan-task-id" maxlength="120"></label>
+          <label>每轮观察秒数<input id="plan-duration" type="number" min="1" max="3600" step="1" value="30"></label>
+          <label>主要观察指标<select id="plan-measure"><option>开屏广告次数</option><option>遮挡弹窗次数</option><option>诱导跳转次数</option><option>内容广告次数</option></select></label>
+        </div><label for="plan-task">固定任务步骤及正常完成的标准</label><textarea id="plan-task" rows="3" maxlength="1500"></textarea>
+        <p>A表示关闭，B表示开启；原定顺序为 A、B、B、A、B、A、A、B。请在实际观察前确定版本、任务与主要指标。</p><button id="plan-create" class="primary">保存并导出计划</button></details>
+        <div class="actions"><button id="plan-import">导入已有计划</button><button id="plan-export" disabled>导出当前计划</button><button id="observation-template">下载未绑定计划的空表</button><button id="observation-import">检查填写后的CSV</button><button id="observation-export" disabled>导出观察表检查</button><input id="plan-file" type="file" accept=".json,application/json" hidden><input id="observation-file" type="file" accept=".csv,text/csv" hidden></div>
+        <p>计划保存在当前浏览器，请导出备份。校验值只能核对内容，不是数字签名或可信时间证明。CSV不会自动上传或保存；记录真实性仍需人工核对。</p><p id="observation-notice" role="status"></p><div id="observation-results"></div>
+      </details>
       <section class="section"><div class="heading"><div><p class="eyebrow">先解决影响使用的问题</p><h2>下一步工作</h2></div><p>按必需项和人工指定的优先级排序；同级先看已发现的问题</p></div><div id="next-actions" class="next-grid"></div></section>
       <section class="section"><div class="heading"><div><h2>逐项看依据</h2><p>可展开来源、版本与原文节选</p></div><div class="filters"><label>状态<select id="status-filter"><option value="all">全部</option><option value="fail">发现问题</option><option value="unknown">证据待补</option><option value="pass">已有依据</option></select></label><label>搜索<input id="review-search" type="search" placeholder="例如：广告、恢复、老人"></label></div></div><p id="filter-count" class="fine" role="status"></p><div id="criteria"></div></section>
       <section class="section"><div class="heading"><div><h2>和上次相比，哪里变了？</h2><p>新增标准单独展示，不把更换标准当作进步。</p></div><label>对照记录<select id="baseline-select"></select></label></div><div id="comparison"></div></section>
       <details class="boundaries"><summary>本轮检查范围与限制</summary><ul id="limitations"></ul></details>
     </div>
-    <footer><p>任务罗盘 · 项目体检 v0.19<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除本页保存的导入记录</button></footer>
+    <footer><p>任务罗盘 · 项目体检 v0.20<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除本页保存的导入记录</button></footer>
   </main>
   <dialog id="editor" aria-labelledby="editor-title">
     <div class="heading"><h2 id="editor-title">记录新一轮检查</h2><button id="editor-close" type="button">关闭</button></div>

@@ -2,6 +2,7 @@
   'use strict';
   const columns=['轮次','计划条件','实际条件','过滤状态已核实','银龄净网版本','被测软件版本','手机代号','网络','任务编号','开始时间','预定观察秒数','实际观察秒数','完整观察','开屏广告次数','遮挡弹窗次数','诱导跳转次数','内容广告次数','空白或错误页','正常任务完成','等待秒数','恢复动作','恢复结果','证据编号','偏差及缺失原因'];
   const adColumns=columns.slice(13,17),contextColumns=columns.slice(4,9);
+  const Plans=typeof module==='object'&&module.exports?require('./observation-plan.js'):root.ObservationPlan;
   function parseCsv(text){
     if(typeof text!=='string'||text.length>2000000)throw Error('观察表需要不超过200万字符的CSV文本');
     text=text.replace(/^\uFEFF/,'');const rows=[];let row=[],cell='',quoted=false,closed=false;
@@ -24,12 +25,12 @@
     if(!rows.length)throw Error('观察表没有轮次');
     return rows.map((cells,i)=>{if(cells.length!==columns.length)throw Error('第'+(i+2)+'行列数不符');return Object.fromEntries(columns.map((key,j)=>[key,cells[j].trim()]));});
   }
-  function auditCsv(text){
+  function auditCsv(text,options={}){
     const raw=parseCsv(text),seen=new Set();
     const enumValue=(value,choices,label,line)=>{if(value&&!choices.includes(value))throw Error('第'+line+'行“'+label+'”应为'+choices.join('/')+'或留空');return value;};
     const number=(value,label,line,integer=false)=>{if(value==='')return null;if(!/^\d+(?:\.\d+)?$/.test(value))throw Error('第'+line+'行“'+label+'”需要非负数，未测请留空');const n=Number(value);if(!Number.isFinite(n)||n>10000000||(integer&&!Number.isSafeInteger(n)))throw Error('第'+line+'行“'+label+'”数值无效');return n;};
     const rows=raw.map((r,i)=>{
-      const line=i+2;if(!/^\d+$/.test(r['轮次'])||Number(r['轮次'])<1||seen.has(Number(r['轮次'])))throw Error('轮次必须为不同的正整数');seen.add(Number(r['轮次']));
+      const line=i+2;if(!/^\d+$/.test(r['轮次'])||!Number.isSafeInteger(Number(r['轮次']))||Number(r['轮次'])<1||seen.has(Number(r['轮次'])))throw Error('轮次必须为不同的有效正整数');seen.add(Number(r['轮次']));
       enumValue(r['计划条件'],['A','B'],'计划条件',line);if(!r['计划条件'])throw Error('第'+line+'行缺少计划条件');
       enumValue(r['实际条件'],['A','B','放行','未知'],'实际条件',line);
       for(const key of ['过滤状态已核实','完整观察','空白或错误页','正常任务完成'])enumValue(r[key],['是','否','未知'],key,line);
@@ -77,20 +78,38 @@
     if(rows.some(r=>r.hasData&&r.observedSec!==null&&r.plannedSec!==null&&r.observedSec!==r.plannedSec))reasons.push('实际观察时长偏离计划，需核对计数对应的完整时段');
     if(rows.some((r,i)=>i>0&&(r.number<=rows[i-1].number||(r.startedAt!==null&&rows[i-1].startedAt!==null&&r.startedAt<=rows[i-1].startedAt))))reasons.push('轮次或开始时间顺序不一致，需人工核对');
     if(rows.some(r=>r.taskResult==='未知'||r.anomaly==='未知'))reasons.push('缺少正常任务或页面异常结果');
-    return {total:rows.length,unrecorded:rows.filter(r=>!r.hasData).length,measured:rows.filter(r=>r.measured).length,groups,rows,
+    const planCheck=options.plan?Plans.match(options.plan,rows):{status:'not_provided',plannedTotal:null,missing:[],extra:[],changed:[],orderChanged:false,chronologyIndependentlyVerified:false};
+    const planReady=planCheck.status==='matches'&&reasons.length===0;
+    return {total:rows.length,unrecorded:rows.filter(r=>!r.hasData).length,measured:rows.filter(r=>r.measured).length,groups,rows,planCheck,readyForPlannedComparison:planReady,
       comparable:reasons.length===0,reasons,benefitEstablished:false,
-      conclusion:reasons.length?'目前只整理逐轮记录，不比较广告效果。':'可整理两组的描述性记录；仍不能自动推出广告收益或因果效果。'};
+      conclusion:reasons.length?'目前只整理逐轮记录，不比较广告效果。':planCheck.status==='not_provided'?'提交的轮次可作描述，但没有独立计划，无法确认是否漏掉原定轮次。':!planReady?'实际记录与独立计划有偏差，先核对遗漏及改变的条件。':'所需记录与独立计划对应；只作描述性整理，不自动推出广告收益或因果效果。'};
   }
   function template(){return '\uFEFF'+columns.join(',')+'\r\n'+[...'ABBABAAB'].map((mode,i)=>[i+1,mode,...Array(columns.length-2).fill('')].join(',')).join('\r\n')+'\r\n';}
+  function templateForPlan(input){const plan=Plans.validate(input),quote=v=>'"'+String(v).replaceAll('"','""')+'"';return '\uFEFF'+columns.join(',')+'\r\n'+plan.rounds.map(r=>{const values={'轮次':r.number,'计划条件':r.condition,'预定观察秒数':plan.durationSeconds};for(const [key,column]of Object.entries(Plans.contextFields))values[column]=plan.context[key];return columns.map(k=>quote(values[k]??'')).join(',');}).join('\r\n')+'\r\n';}
   function markdown(result){
     const safe=v=>String(v).replace(/[\r\n]/g,' ').replace(/[<>]/g,'').replace(/([\\`*_[\]#|])/g,'\\$1');
-    let out='# 广告观察表检查\n\n'+result.conclusion+'\n\n计划 '+result.total+' 轮；尚未记录 '+result.unrecorded+' 轮；可汇总广告计数 '+result.measured+' 轮。未测字段保留未知，不填0。\n\n';
+    let out='# 广告观察表检查\n\n'+result.conclusion+'\n\n提交 '+result.total+' 轮；尚未记录 '+result.unrecorded+' 轮；可汇总广告计数 '+result.measured+' 轮。未测字段保留未知，不填0。\n\n';
     if(result.reasons.length)out+='暂不比较的原因：\n\n'+result.reasons.map(v=>'- '+v).join('\n')+'\n\n';
-    out+='|条件|有效计数轮次|正常任务完成|任务失败|任务结果未知|空白或错误页|\n|---|---:|---:|---:|---:|---:|\n';
-    for(const mode of ['A','B']){const g=result.groups[mode];out+='|'+[mode,g.measured,g.tasksComplete,g.tasksFailed,g.tasksUnknown,g.anomaly].join('|')+'|\n';}
+    const pc=result.planCheck;
+    if(pc.status==='not_provided')out+='未提供独立计划：无法确认是否遗漏原定轮次，也不能把提交行数当作原定样本数。\n\n';
+    else{
+      out+='独立计划：'+safe(pc.planId)+'；原定'+pc.plannedTotal+'轮，提交'+pc.submittedTotal+'轮。主要指标：'+safe(pc.primaryMeasure)+'。\n\n';
+      out+='声明建立时间：'+safe(pc.createdAt)+'。每轮预定'+pc.durationSeconds+'秒。\n\n固定任务：'+safe(pc.task)+'。\n\n';
+      for(const [key,label] of Object.entries(Plans.contextFields))out+='- '+label+'：'+safe(pc.context[key])+'\n';
+      out+='\n';
+      if(pc.missing.length)out+='缺失轮次：'+pc.missing.join('、')+'。缺失不算通过，也不自动补写失败。\n\n';
+      if(pc.extra.length)out+='额外轮次：'+pc.extra.join('、')+'。不能悄悄纳入原定样本。\n\n';
+      for(const row of pc.changed)out+='- 第'+row.number+'轮计划偏差：'+row.issues.map(safe).join('；')+'。\n';
+      if(pc.orderChanged)out+='\n提交顺序与原计划不同。\n';
+      out+='\n'+pc.limitation+'\n\n';
+    }
+    out+='|条件|有效计数轮次|正常任务完成|任务失败|任务结果未知|空白或错误页|页面情况未知|\n|---|---:|---:|---:|---:|---:|---:|\n';
+    for(const mode of ['A','B']){const g=result.groups[mode];out+='|'+[mode,g.measured,g.recorded?g.tasksComplete:'未记录',g.recorded?g.tasksFailed:'未记录',g.recorded?g.tasksUnknown:'未知',g.recorded?g.anomaly:'未知',g.recorded?g.anomalyUnknown:'未知'].join('|')+'|\n';}
+    out+='\n|广告分类|A组计数|B组计数|\n|---|---:|---:|\n';
+    for(const key of adColumns)out+='|'+[key,result.groups.A.ads[key]??'未知',result.groups.B.ads[key]??'未知'].join('|')+'|\n';
     out+='\n各组计数只对应实际声明条件，未核实的条件与不完整轮次不能进入广告汇总。记录是否真实仍需人工核对。\n\n';
     for(const r of result.rows)out+='- 第'+r.number+'轮（计划'+r.planned+'，实际'+safe(r.actual)+'）：'+(r.warnings.length?r.warnings.map(safe).join('；'):'所需字段齐备')+'。\n';
     return out;
   }
-  const api={columns,adColumns,auditCsv,parseCsv,template,markdown};if(typeof module==='object'&&module.exports)module.exports=api;root.ObservationAudit=api;
+  const api={columns,adColumns,auditCsv,parseCsv,template,templateForPlan,markdown};if(typeof module==='object'&&module.exports)module.exports=api;root.ObservationAudit=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
