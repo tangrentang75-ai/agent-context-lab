@@ -67,6 +67,8 @@
         anomaly:actual.filter(r=>r.anomaly==='是').length,anomalyUnknown:actual.filter(r=>r.anomaly==='未知').length,
         ads:Object.fromEntries(adColumns.map(k=>[k,measured.length?measured.reduce((n,r)=>n+r.ads[k],0):null]))}];
     }));
+    const unassigned=rows.filter(r=>r.hasData&&!['A','B'].includes(r.actual));
+    const unassignedSummary={recorded:unassigned.length,tasksFailed:unassigned.filter(r=>r.taskResult==='否').length,tasksUnknown:unassigned.filter(r=>r.taskResult==='未知').length,anomaly:unassigned.filter(r=>r.anomaly==='是').length,anomalyUnknown:unassigned.filter(r=>r.anomaly==='未知').length};
     const contexts=new Set(rows.filter(r=>r.measured).map(r=>JSON.stringify([...r.context,r.plannedSec])));
     const reasons=[];
     if(rows.some(r=>!r.hasData))reasons.push('存在尚未执行的计划轮次');
@@ -78,9 +80,12 @@
     if(rows.some(r=>r.hasData&&r.observedSec!==null&&r.plannedSec!==null&&r.observedSec!==r.plannedSec))reasons.push('实际观察时长偏离计划，需核对计数对应的完整时段');
     if(rows.some((r,i)=>i>0&&(r.number<=rows[i-1].number||(r.startedAt!==null&&rows[i-1].startedAt!==null&&r.startedAt<=rows[i-1].startedAt))))reasons.push('轮次或开始时间顺序不一致，需人工核对');
     if(rows.some(r=>r.taskResult==='未知'||r.anomaly==='未知'))reasons.push('缺少正常任务或页面异常结果');
+    const ends=new Map();let overlaps=false;
+    for(const r of rows){const device=r.raw['手机代号'];if(!device||r.startedAt===null||r.observedSec===null||r.observedSec<=0)continue;const end=r.startedAt+r.observedSec*1000;if(ends.has(device)&&r.startedAt<ends.get(device))overlaps=true;ends.set(device,Math.max(ends.get(device)||0,end));}
+    if(overlaps)reasons.push('同一手机的观察时段重叠，需核对开始时间与实际时长');
     const planCheck=options.plan?Plans.match(options.plan,rows):{status:'not_provided',plannedTotal:null,missing:[],extra:[],changed:[],orderChanged:false,chronologyIndependentlyVerified:false};
     const planReady=planCheck.status==='matches'&&reasons.length===0;
-    return {total:rows.length,unrecorded:rows.filter(r=>!r.hasData).length,measured:rows.filter(r=>r.measured).length,groups,rows,planCheck,readyForPlannedComparison:planReady,
+    return {total:rows.length,unrecorded:rows.filter(r=>!r.hasData).length,measured:rows.filter(r=>r.measured).length,groups,unassigned:unassignedSummary,rows,planCheck,readyForPlannedComparison:planReady,
       comparable:reasons.length===0,reasons,benefitEstablished:false,
       conclusion:reasons.length?'目前只整理逐轮记录，不比较广告效果。':planCheck.status==='not_provided'?'提交的轮次可作描述，但没有独立计划，无法确认是否漏掉原定轮次。':!planReady?'实际记录与独立计划有偏差，先核对遗漏及改变的条件。':'所需记录与独立计划对应；只作描述性整理，不自动推出广告收益或因果效果。'};
   }
@@ -108,6 +113,7 @@
     out+='\n|广告分类|A组计数|B组计数|\n|---|---:|---:|\n';
     for(const key of adColumns)out+='|'+[key,result.groups.A.ads[key]??'未知',result.groups.B.ads[key]??'未知'].join('|')+'|\n';
     out+='\n各组计数只对应实际声明条件，未核实的条件与不完整轮次不能进入广告汇总。记录是否真实仍需人工核对。\n\n';
+    if(result.unassigned.recorded){const g=result.unassigned;out+='实际条件未知或属于放行的记录共'+g.recorded+'轮，未纳入A/B广告汇总；其中任务失败'+g.tasksFailed+'轮、任务结果未知'+g.tasksUnknown+'轮、空白或错误页'+g.anomaly+'轮、页面情况未知'+g.anomalyUnknown+'轮。不能因不分组而忽略这些问题。\n\n';}
     for(const r of result.rows)out+='- 第'+r.number+'轮（计划'+r.planned+'，实际'+safe(r.actual)+'）：'+(r.warnings.length?r.warnings.map(safe).join('；'):'所需字段齐备')+'。\n';
     return out;
   }

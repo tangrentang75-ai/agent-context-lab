@@ -40,6 +40,7 @@
       box.append(table(['条件','表内计划 / 已记录','有效广告计数轮次','任务完成 / 失败 / 未知','错误页 / 情况未知'],['A','B'].map(mode=>{const g=result.groups[mode];return [mode==='A'?'A · 关闭':'B · 开启',g.planned+' / '+g.recorded,g.measured,g.recorded?g.tasksComplete+' / '+g.tasksFailed+' / '+g.tasksUnknown:'尚未记录',g.recorded?g.anomaly+' / '+g.anomalyUnknown:'未知'];})));
       box.append(node('p','以下计数仅汇总条件已核实且完整观察的轮次。请同时看有效轮次和任务失败情况，不据此计算总体减少率。'));
       box.append(table(['广告分类','A组计数','B组计数'],A.adColumns.map(k=>[k,result.groups.A.ads[k]??'未知',result.groups.B.ads[k]??'未知'])));
+      if(result.unassigned.recorded){const g=result.unassigned;box.append(node('p','另有 '+g.recorded+' 轮实际条件未知或属于放行，未纳入A/B广告汇总；其中任务失败 '+g.tasksFailed+' 轮、任务结果未知 '+g.tasksUnknown+' 轮、错误页 '+g.anomaly+' 轮、页面情况未知 '+g.anomalyUnknown+' 轮。'))}
       const details=node('details'),list=node('ul');details.append(node('summary','查看每轮缺项与异常'));result.rows.forEach(r=>list.append(node('li','第'+r.number+'轮：'+(r.warnings.join('；')||'所需字段齐备'))));details.append(list);box.append(details);
       notice('已在浏览器本地读取 '+csvName+'。未上传，也未将结果改写为项目通过。');$('observation-export').disabled=false;
     }catch(e){result=null;$('observation-results').replaceChildren();$('observation-export').disabled=true;notice('未完成检查：'+e.message);}
