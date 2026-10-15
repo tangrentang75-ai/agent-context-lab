@@ -19,6 +19,7 @@ Object.assign(allowed, {'/project-review.html':'project-review.html','/project-r
 Object.assign(allowed, {'/observation-audit.js':'observation-audit.js','/observation-audit-ui.js':'observation-audit-ui.js'});
 Object.assign(allowed, {'/observation-plan.js':'observation-plan.js'});
 Object.assign(allowed, {'/evidence-file-check.js':'evidence-file-check.js'});
+Object.assign(allowed, {'/project-review-backup.js':'project-review-backup.js'});
 const port = Number(process.env.PORT || 4173);
 function createServer(executor=bridge,{passageReader=latestPassageStudy,taskExecutor=taskExecution,projectReviewReader=readReview}={}) {
 let running=false;

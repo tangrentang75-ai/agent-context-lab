@@ -1,6 +1,6 @@
 'use strict';
 (() => {
-  const R=window.ProjectReview,$=id=>document.getElementById(id),KEY='acl-project-reviews-v1';
+  const R=window.ProjectReview,B=window.ProjectReviewBackup,$=id=>document.getElementById(id),KEY='acl-project-reviews-v1';
   let records=[],selected='',baseline=null,saved=[],savedRaw=null,storageBlocked=false,selectionEpoch=0;
   const fileChecks=new Map(),fileCheckNodes=new Map(),fileCheckEpochs=new Map();let requestedFileCheck=null;
   function showFileCheck(key){for(const el of fileCheckNodes.get(key)||[])el.textContent=fileChecks.get(key)||'本页尚未核对原文件。最大20MiB，仅在本机计算，不上传文件。';}
@@ -10,22 +10,27 @@
   function current(){return records.find(r=>r.id===selected);}
   function download(name,text,type){const url=URL.createObjectURL(new Blob([text],{type}));const a=node('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function same(a,b){return JSON.stringify(a)===JSON.stringify(b);}
+  function storageInfo(){
+    $('saved-count').textContent=storageBlocked?'保存区无法完整读取，已保留原数据。请先处理读取问题。':'当前浏览器已保存 '+saved.length+' / 10份检查记录。备份只生成本机下载文件，不自动上传。';
+    $('export-backup').disabled=storageBlocked||!saved.length;
+  }
   function addRecords(incoming){
     const next=[...records];
     for(const raw of incoming){const r=R.validate(raw),existing=next.find(x=>x.id===r.id);if(existing&&!same(existing,r))throw Error('编号 '+r.id+' 已存在且内容不同。请保留旧记录，为修订记录使用新的编号。');if(!existing)next.push(r);}
     records=next;
   }
   function restore(){
-    try{savedRaw=localStorage.getItem(KEY);if(savedRaw!==null){if(savedRaw.length>4000000)throw Error('保存的数据过大');const parsed=JSON.parse(savedRaw);if(!Array.isArray(parsed)||parsed.length>10)throw Error('保存格式错误');saved=parsed.map(R.validate);addRecords(saved);}}
+    try{savedRaw=localStorage.getItem(KEY);if(savedRaw!==null){if(savedRaw.length>B.MAX_CHARS)throw Error('保存的数据过大');saved=B.records(JSON.parse(savedRaw));addRecords(saved);}}
     catch(e){storageBlocked=true;notice('已保存的导入记录无法读取；不会覆盖原数据。可先导出其他记录，或使用底部清除按钮。'+e.message,true);}
   }
-  function persist(record){
+  function persist(record){persistBatch([record]);}
+  function persistBatch(incoming){
     if(storageBlocked)throw Error('本页保存区暂不可写，请先处理底部的损坏记录提示。');
-    const next=saved.some(r=>r.id===record.id)?saved:[...saved,record];
-    if(next.length>10)throw Error('已保存10份导入记录。请先导出备份，再清除本页保存区。');
+    for(const r of incoming){const old=records.find(x=>x.id===r.id);if(old&&!same(old,r))throw Error('相同编号已有不同内容：'+r.id+'。未覆盖原记录。');}
+    const next=B.merge(saved,incoming);
     if(localStorage.getItem(KEY)!==savedRaw)throw Error('另一页面改变了保存记录，请刷新后重试，避免覆盖。');
     const value=JSON.stringify(next);if(value.length>4000000)throw Error('导入记录总量过大，请先导出备份。');
-    localStorage.setItem(KEY,value);saved=next;savedRaw=value;
+    localStorage.setItem(KEY,value);saved=next;savedRaw=value;storageInfo();
   }
   function fillSelectors(){
     const label=r=>r.date+' · '+r.version+' · '+r.title+'（'+r.reviewer+'）';
@@ -35,6 +40,7 @@
     $('baseline-select').replaceChildren(option('','不比较'),...choices.map(r=>option(r.id,r.date+' · '+r.version+'（'+r.reviewer+'）')));$('baseline-select').value=baseline;
   }
   function render(){
+    storageInfo();
     fileCheckNodes.clear();
     fillSelectors();const c=current();$('result').hidden=!c;$('empty').hidden=!!c;
     for(const id of ['new-round','export-report','export-review','export-dataset'])$(id).disabled=!c;
@@ -110,6 +116,23 @@
   $('export-report').addEventListener('click',()=>download(current().id+'.md',R.markdown(current()),'text/markdown;charset=utf-8'));
   $('export-review').addEventListener('click',()=>download(current().id+'.json',JSON.stringify(current(),null,2),'application/json'));
   $('export-dataset').addEventListener('click',()=>download(current().id+'-验收导入.json',JSON.stringify(R.toDataset(current()),null,2),'application/json'));
+  $('export-backup').addEventListener('click',()=>{try{
+    if(storageBlocked||!saved.length)throw Error('没有可完整备份的已保存记录。');
+    if(localStorage.getItem(KEY)!==savedRaw)throw Error('另一页面改变了保存记录，请刷新后备份。');
+    const backup=B.create(saved);download('项目检查备份-'+backup.exportedAt.replace(/[:.]/g,'-')+'.json',JSON.stringify(backup),'application/json');
+    notice('已生成 '+saved.length+' 份已保存检查的备份下载。请确认文件下载完成并妥善保存；未上传资料。');
+  }catch(e){notice('备份未完成：'+e.message,true);}});
+  $('import-backup').addEventListener('click',()=>$('backup-file').click());
+  $('backup-file').addEventListener('change',async event=>{
+    const file=event.target.files[0];event.target.value='';if(!file)return;const generation=++selectionEpoch;
+    try{
+      if(file.size>B.MAX_FILE_BYTES)throw Error('备份文件超过13MB。');
+      const text=await file.text();if(generation!==selectionEpoch)return;
+      const backup=B.parse(text),before=saved.length;persistBatch(backup.records);addRecords(backup.records);
+      if(!selected&&backup.records.length)selected=backup.records.at(-1).id;
+      render();notice('备份恢复完成：新增 '+(saved.length-before)+' 份，已有相同记录 '+(backup.records.length-(saved.length-before))+' 份。原记录保留，未独立验证材料真实性。');
+    }catch(e){if(generation===selectionEpoch)notice('备份未恢复：'+e.message+' 原保存区未改动。',true);}
+  });
   let draft=null,editedId='',draftBase=null;
   const sourceInputs=['title','date','version','locator','text','quote','sha256'];
   function showCriterion(){
@@ -185,7 +208,7 @@
     const record=R.createProject({id:'review-'+crypto.randomUUID(),projectId:'project-'+crypto.randomUUID(),title:$('builder-name').value,date:$('builder-date').value,version:$('builder-version').value,reviewer:$('builder-reviewer').value,scope:$('builder-scope').value,owner:$('builder-owner').value,limitations:$('builder-limitations').value.split(/\r?\n/).map(v=>v.trim()).filter(Boolean),goals:goalRows.map(({fields:f})=>({label:f.label.value,kind:f.kind.value,required:f.required.value==='true',versionPolicy:f.versionPolicy.value,method:f.method.value,doneWhen:f.doneWhen.value}))});
     persist(record);addRecords([record]);selectionEpoch++;selected=record.id;baseline='';$('status-filter').value='all';$('review-search').value='';$('project-builder').close();render();notice('新项目清单已保存，所有检查项均为证据待补。请导出检查数据备份，取得实际记录后再新增一轮检查。');
   }catch(e){$('builder-notice').textContent='没有建立清单：'+e.message;}});
-  $('clear-saved').addEventListener('click',()=>{if(!confirm('只清除本页在浏览器保存的导入记录。请先导出需要保留的数据；不会删除电脑源文件。'))return;try{localStorage.removeItem(KEY);saved=[];savedRaw=null;storageBlocked=false;notice('浏览器保存区已清除。当前已打开的记录仍可查看和导出，刷新后不再恢复。');}catch(e){notice('清除失败：'+e.message,true);}});
+  $('clear-saved').addEventListener('click',()=>{if(!confirm('只清除本页在浏览器保存的导入记录。请先导出需要保留的数据；不会删除电脑源文件。'))return;try{if(localStorage.getItem(KEY)!==savedRaw)throw Error('另一页面改变了保存记录，请刷新后再决定是否清除。');localStorage.removeItem(KEY);selectionEpoch++;saved=[];savedRaw=null;storageBlocked=false;storageInfo();notice('浏览器保存区已清除。当前已打开的记录仍可查看和导出，刷新后不再恢复。');}catch(e){notice('清除失败：'+e.message,true);}});
   $('template').addEventListener('click',()=>{
     const date=new Date().toLocaleDateString('sv-SE');
     const template={schema:'project-review-v1',id:'my-review-001',projectId:'my-project',title:'待填写的项目名称',date,version:'待填写版本',scope:'填写本次真正检查的范围',reviewer:'填写实际审阅人或方式',limitations:['空白模板，没有真实检查结果'],evidence:[],criteria:[{id:'goal-1',label:'填写可观察的目标',required:true,kinds:['device'],versionPolicy:'current',status:'unknown',summary:'尚未取得证据',refs:[],next:{action:'填写下一步动作',owner:'填写负责角色',method:'填写测试方法',doneWhen:'填写完成所需证据',priority:'now'}}]};download('项目检查空白模板.json',JSON.stringify(template,null,2),'application/json');

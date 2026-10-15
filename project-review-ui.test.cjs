@@ -5,8 +5,8 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
 function record(id='original'){return R.createProject({id,projectId:'project-one',title:id,date:'2026-10-14',version:'test',scope:'仅软件测试',reviewer:'测试',owner:'测试角色',limitations:['不是实际项目验收'],goals:[{label:'软件测试目标',kind:'desktop',required:true,versionPolicy:'current',method:'自动检查',doneWhen:'保存测试日志'}]});}
 // Minimal DOM doubles for event/state unit tests; this does not automate a browser.
-function harness({storage=new Map(),fetcher}={}){
-  const nodes=new Map();let serial=0;
+function harness({storage=new Map(),fetcher,confirmAction=()=>false}={}){
+  const nodes=new Map(),downloads=[];let serial=0;
   class Element{
     constructor(tag='div'){this.tagName=tag;this.children=[];this.listeners={};this.value='';this.disabled=false;this.hidden=false;this.open=false;this._text='';this.classes=new Set();this.classList={toggle:(name,on)=>on?this.classes.add(name):this.classes.delete(name)};}
     set id(v){this._id=v;nodes.set(v,this);}get id(){return this._id;}
@@ -23,9 +23,9 @@ function harness({storage=new Map(),fetcher}={}){
   nodes.get('status-filter').value='all';
   const get=id=>{const e=nodes.get(id);if(!e)throw Error('Missing DOM id '+id);return e;};
   const localStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value),removeItem:key=>storage.delete(key)};
-  const context={window:{ProjectReview:R,EvidenceFileCheck:require('./evidence-file-check.js')},document:{getElementById:get,createElement:tag=>new Element(tag)},localStorage,fetch:fetcher||(()=>Promise.resolve({ok:false,json:async()=>({error:'无本地案例'})})),crypto:{randomUUID:()=>`synthetic-${++serial}`},structuredClone,Date,URL:{createObjectURL:()=> 'blob:test',revokeObjectURL(){}},Blob,setTimeout,confirm:()=>false};
+  const context={window:{ProjectReview:R,ProjectReviewBackup:require('./project-review-backup.js'),EvidenceFileCheck:require('./evidence-file-check.js')},document:{getElementById:get,createElement:tag=>new Element(tag)},localStorage,fetch:fetcher||(()=>Promise.resolve({ok:false,json:async()=>({error:'无本地案例'})})),crypto:{randomUUID:()=>`synthetic-${++serial}`},structuredClone,Date,URL:{createObjectURL:blob=>{downloads.push(blob);return 'blob:test';},revokeObjectURL(){}},Blob,setTimeout,confirm:confirmAction};
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'project-review-ui.js'),'utf8'),context,{filename:'project-review-ui.js'});
-  return {get,storage,import:async file=>get('review-file').emit('change',{target:{files:[file],value:'file'}})};
+  return {get,storage,downloads,import:async file=>get('review-file').emit('change',{target:{files:[file],value:'file'}}),restoreBackup:async file=>get('backup-file').emit('change',{target:{files:[file],value:'file'}})};
 }
 const file=r=>({size:100,text:async()=>JSON.stringify(r)});
 test('后选择的导入先完成时，迟到旧文件不改变选择或写入保存区',async()=>{
@@ -73,4 +73,23 @@ test('无校验值仍可保存来源；错误值不保存且保留可修改草�
 });
 test('同一来源多条引文只显示一次来源按钮，同时保留每条引文和无效提示',async()=>{
   const r=evidenceRecord();r.criteria[0].status='pass';r.criteria[0].refs=[{evidenceId:'e1',quote:'synthetic'},{evidenceId:'e1',quote:'source'},{evidenceId:'e1',quote:'missing quote'}];const h=harness();await tick();await h.import(file(r));const nodes=descendants(h.get('criteria'));assert.equal(nodes.filter(n=>n.tagName==='button').length,1);assert.deepEqual(nodes.filter(n=>n.tagName==='blockquote').map(n=>n.textContent),['synthetic','source','missing quote']);assert.match(h.get('criteria').textContent,/不一致/);assert.match(h.get('metrics').textContent,/1证据待补/);await checkFile(h,sourceFile('synthetic source'));assert.match(h.get('criteria').textContent,/校验值一致/);assert.match(h.get('criteria').textContent,/不一致/);assert.match(h.get('metrics').textContent,/1证据待补/);
+});
+const B=require('./project-review-backup.js');
+test('整批恢复保留原记录、去重；后续冲突或损坏项使整批不写入',async()=>{
+  const h=harness();await tick();await h.import(file(record('base')));await h.restoreBackup(file(B.create([record('base'),record('new')])));assert.deepEqual(JSON.parse(h.storage.get(KEY)).map(r=>r.id),['base','new']);const before=h.storage.get(KEY);await h.restoreBackup(file(B.create([record('another'),{...record('base'),title:'conflict'}])));assert.equal(h.storage.get(KEY),before);assert.match(h.get('notice').textContent,/不同内容/);await h.restoreBackup(file({schema:'project-review-backup-v1',exportedAt:new Date().toISOString(),records:[record('another'),{id:'broken'}]}));assert.equal(h.storage.get(KEY),before);
+});
+test('备份只导出已保存记录，不包含仅从本机读取的记录；过期页面拒绝导出',async()=>{
+  const storage=new Map([[KEY,JSON.stringify([record('saved')])]]),h=harness({storage,fetcher:async()=>({ok:true,json:async()=>({current:record('local')})})});await tick();await h.get('export-backup').click();assert.deepEqual(JSON.parse(await h.downloads[0].text()).records.map(r=>r.id),['saved']);storage.set(KEY,JSON.stringify([record('newer')]));await h.get('export-backup').click();assert.equal(h.downloads.length,1);assert.match(h.get('notice').textContent,/刷新后备份/);
+});
+test('恢复备份遇到另一页变更或存储写入失败时，不显示部分新记录',async()=>{
+  const storage=new Map([[KEY,JSON.stringify([record('base')])]]),h=harness({storage});await tick();storage.set(KEY,JSON.stringify([record('external')]));await h.restoreBackup(file(B.create([record('new')])));assert.equal(JSON.parse(storage.get(KEY))[0].id,'external');assert.ok(!h.get('record-select').children.some(n=>n.value==='new'));
+  const storage2=new Map([[KEY,JSON.stringify([record('base')])]]),g=harness({storage:storage2});await tick();storage2.set=()=>{throw Error('QuotaExceeded');};await g.restoreBackup(file(B.create([record('new')])));assert.equal(JSON.parse(storage2.get(KEY)).length,1);assert.ok(!g.get('record-select').children.some(n=>n.value==='new'));assert.match(g.get('notice').textContent,/QuotaExceeded/);
+});
+test('迟到备份不覆盖后续选择，超大文件在读取前拒绝，损坏保存区不被重置',async()=>{
+  const h=harness();await tick();await h.import(file(record('base')));const slow=deferred(),pending=h.restoreBackup({size:100,text:()=>slow.promise});await h.import(file(record('newer')));slow.resolve(JSON.stringify(B.create([record('late')])));await pending;assert.equal(h.get('record-select').value,'newer');assert.deepEqual(JSON.parse(h.storage.get(KEY)).map(r=>r.id),['base','newer']);let read=false;await h.restoreBackup({size:B.MAX_FILE_BYTES+1,text:()=>{read=true;}});assert.equal(read,false);
+  const storage=new Map([[KEY,'broken']]),g=harness({storage});await tick();await g.restoreBackup(file(B.create([record('new')])));assert.equal(storage.get(KEY),'broken');assert.equal(g.get('export-backup').disabled,true);
+});
+test('清除拒绝过期页面；清除成功后正在读取的导入不能悄悄重新保存',async()=>{
+  const storage=new Map([[KEY,JSON.stringify([record('base')])]]),h=harness({storage,confirmAction:()=>true});await tick();storage.set(KEY,JSON.stringify([record('external')]));await h.get('clear-saved').click();assert.equal(JSON.parse(storage.get(KEY))[0].id,'external');assert.match(h.get('notice').textContent,/另一页面/);
+  const g=harness({confirmAction:()=>true});await tick();await g.import(file(record('base')));const slow=deferred(),pending=g.restoreBackup({size:100,text:()=>slow.promise});await g.get('clear-saved').click();slow.resolve(JSON.stringify(B.create([record('late')])));await pending;assert.equal(g.storage.get(KEY),undefined);assert.equal(g.get('export-backup').disabled,true);assert.match(g.get('saved-count').textContent,/0 \/ 10/);
 });
