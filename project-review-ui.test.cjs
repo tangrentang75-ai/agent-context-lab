@@ -158,3 +158,10 @@ test('正常保存区不显示排查入口；损坏快照过期或读取被拒�
   const storage=new Map([[KEY,'broken']]),h=harness({storage});await tick();storage.set(KEY,'newer broken');await h.get('export-storage-recovery').click();assert.equal(h.downloads.length,0);assert.match(h.get('notice').textContent,/另一页面/);assert.equal(storage.get(KEY),'newer broken');
   const blocked=new Map();blocked.get=()=>{throw Error('read denied');};const g=harness({storage:blocked});await tick();assert.equal(g.get('export-storage-recovery').hidden,true);assert.equal(g.get('export-storage-recovery').disabled,true);assert.equal(g.get('export-backup').disabled,true);
 });
+
+test('数组伪装的状态不能经单份或整批导入写入，坏存档保留原文而不参与判断',async()=>{
+  const h=harness();await tick();await h.import(file(record('base')));const original=h.storage.get(KEY),bad=record('malformed');bad.criteria[0].status=['pass'];
+  await h.import(file(bad));assert.equal(h.storage.get(KEY),original);assert.match(h.get('notice').textContent,/状态无效/);assert.equal(h.get('record-select').value,'base');
+  await h.restoreBackup(file({schema:'project-review-backup-v1',exportedAt:new Date().toISOString(),records:[record('new'),bad]}));assert.equal(h.storage.get(KEY),original);assert.ok(!h.get('record-select').children.some(n=>n.value==='new'));assert.match(h.get('notice').textContent,/状态无效/);
+  const raw=JSON.stringify([bad]),g=harness({storage:new Map([[KEY,raw]])});await tick();assert.equal(g.get('result').hidden,true);assert.equal(g.get('export-backup').disabled,true);assert.equal(g.storage.get(KEY),raw);await g.get('export-storage-recovery').click();assert.equal(JSON.parse(await g.downloads[0].text()).raw,raw);
+});

@@ -2,7 +2,7 @@
   'use strict';
   const kinds = { document: '方案与材料', desktop: '电脑测试', device: '设备实测记录', participant: '参与者观察记录' };
   const statuses = { pass: '已有依据', fail: '发现问题', unknown: '证据待补' };
-  const own = (obj, key) => Object.hasOwn(obj, key);
+  const own = (obj, key) => typeof key === 'string' && Object.hasOwn(obj, key);
   function validate(input) {
     const fail = message => { throw Error(message); };
     const object = (v, p) => { if (!v || typeof v !== 'object' || Array.isArray(v)) fail(p + ' 应为对象'); };
@@ -29,7 +29,7 @@
       const item = { id: e.id, title: text(e.title, '证据标题', 200), kind: e.kind, date: recordedAt,
         version: text(e.version, '证据版本', 120), locator: text(e.locator, '证据位置', 500),
         text: text(e.text, '证据节选', 16000) };
-      if (e.sha256 !== undefined) { if (!/^[a-f0-9]{64}$/.test(e.sha256)) fail('证据原文件哈希无效'); item.sha256 = e.sha256; }
+      if (e.sha256 !== undefined) { if (typeof e.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(e.sha256)) fail('证据原文件哈希无效'); item.sha256 = e.sha256; }
       out.evidence.push(item);
     }
     array(input.criteria, '检查项', 1, 20);
