@@ -12,7 +12,7 @@
   <header class="site-header"><a class="brand" href="/">◈ 任务罗盘</a><nav aria-label="工作台导航"><a href="/">任务工作台</a><a href="decision.html">资源决策</a><a href="ledger.html">执行台账</a><a href="project-review.html" aria-current="page">项目体检</a></nav><span class="local">本机资料</span></header>
   <main id="content">
     <input id="evidence-file" type="file" hidden aria-label="选择证据原文件">
-    <section class="intro"><div><p class="eyebrow">从“做出来了”到“确实有用”</p><h1>项目下一步，该做什么？</h1><p class="subtitle">先看证据能说明什么，再安排值得投入的工作。</p></div><div class="actions"><button id="create-project" class="primary">开始新项目检查</button><button id="load-local">读取银龄净网最新检查</button><button id="import-review">导入检查记录</button><input id="review-file" type="file" accept=".json,application/json" hidden></div></section>
+    <section class="intro"><div><p class="eyebrow">从“做出来了”到“确实有用”</p><h1>项目下一步，该做什么？</h1><p class="subtitle">先看证据能说明什么，再安排值得投入的工作。</p></div><div class="actions"><button id="create-project" class="primary">开始新项目检查</button><button id="load-local">读取银龄净网最新检查</button><button id="import-review">导入检查记录</button><a class="backup-link" href="#review-backup">备份与恢复</a><input id="review-file" type="file" accept=".json,application/json" hidden></div></section>
     <p id="notice" class="notice" role="status" aria-live="polite">正在读取本机已保存的项目检查…</p>
     <section class="toolbar" aria-label="记录与导出"><label>查看记录<select id="record-select" disabled><option>暂无记录</option></select></label><div class="actions"><button id="new-round" disabled>记录新一轮检查</button><button id="export-report" disabled>导出报告</button><button id="export-review" disabled>导出检查数据</button><button id="export-dataset" disabled>导出首页验收数据</button></div></section>
     <section id="empty" class="empty" hidden><h2>还没有检查记录</h2><p>点击上方“开始新项目检查”，填写目标和验证方法。也可以导入以前导出的记录，或读取本机银龄净网资料。</p><button id="template">下载空白模板</button></section>
@@ -44,8 +44,8 @@
         <p>计划保存在当前浏览器，请导出备份。校验值只能核对内容，不是数字签名或可信时间证明。CSV不会自动上传或保存；记录真实性仍需人工核对。</p><p id="observation-notice" role="status"></p><div id="observation-results"></div>
       </details>
     </section>
-    <section class="section boundaries" aria-labelledby="backup-title"><h2 id="backup-title">把检查记录带走</h2><p id="saved-count" role="status"></p><p>备份当前浏览器保存的项目检查及历次记录。电脑源文件、仅从本机接口读取的记录、广告观察计划和临时核对结果不在其中。恢复时与现有记录合并；同编号不同内容会整批拒绝。</p><div class="actions"><button id="export-backup" disabled>备份全部已保存检查</button><button id="import-backup">恢复检查备份</button><input id="backup-file" type="file" accept=".json,application/json" hidden></div></section>
-    <footer><p>任务罗盘 · 项目体检 v0.24.2<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除本页保存的导入记录</button></footer>
+    <section id="review-backup" tabindex="-1" class="section boundaries" aria-labelledby="backup-title"><h2 id="backup-title">把检查记录带走</h2><p id="saved-count" role="status"></p><p>备份当前浏览器保存的项目检查及历次记录。电脑源文件、仅从本机接口读取的记录、广告观察计划和临时核对结果不在其中。恢复时与现有记录合并；同编号不同内容会整批拒绝。</p><div class="actions"><button id="export-backup" disabled>备份全部已保存检查</button><button id="import-backup">恢复检查备份</button><input id="backup-file" type="file" accept=".json,application/json" hidden></div></section>
+    <footer><p>任务罗盘 · 项目体检 v0.24.3<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除本页保存的导入记录</button></footer>
   </main>
   <dialog id="project-builder" aria-labelledby="builder-title">
     <div class="heading"><h2 id="builder-title">先说清楚，这个项目要做到什么</h2><button id="builder-close" type="button">关闭新项目窗口</button></div>
