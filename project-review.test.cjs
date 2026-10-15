@@ -28,3 +28,12 @@ test('JSON数组不能冒充状态、证据类型或校验值字符串',()=>{
   const mutations=[f=>{f.criteria[0].status=['pass'];},f=>{f.evidence[0].kind=['desktop'];},f=>{f.criteria[0].kinds=[['desktop']];},f=>{f.evidence[0].sha256=['ab'.repeat(32)];}];
   for(const mutate of mutations){const f=fixture();mutate(f);const input=JSON.parse(JSON.stringify(f)),before=JSON.stringify(input);for(const fn of [R.validate,R.assess,R.markdown,R.toDataset])assert.throws(()=>fn(input));assert.equal(JSON.stringify(input),before);}
 });
+
+test('报告带检查与项目编号、审阅方式、来源身份和适用要求，未知资源不伪造数值',()=>{
+  const f=fixture(),before=JSON.stringify(f),md=R.markdown(f);assert.match(md,/检查编号：check-1/);assert.match(md,/项目编号：project-1/);assert.match(md,/审阅方式（记录填写）：测试审阅者/);assert.match(md,/依据：纯Java检查（电脑测试；证据编号：e1）/);assert.match(md,/检查项编号：core。接受 电脑测试；需要当前版本证据/);assert.match(md,/未包含模型用量或耗时/);assert.equal(JSON.stringify(f),before);
+});
+
+test('报告说明原判断退回待补并保留下一步优先级，新元数据不能注入Markdown',()=>{
+  const f=fixture();f.criteria[0].refs[0].quote='wrong quote';f.criteria[0].next.priority='later';f.reviewer='[fake](https://example.org)\n# fake';f.evidence[0].title='<script>fake</script>';
+  const md=R.markdown(f);assert.match(md,/原填写判断：已有依据.*本报告保留为“证据待补”/);assert.match(md,/引文与保存的节选不一致/);assert.match(md,/下一步（条件具备后开展）/);assert.ok(!md.includes('[fake]'));assert.ok(!md.includes('\n# fake'));assert.ok(!md.includes('<script>'));assert.match(md,/已有依据 0 项.*证据待补 1 项/);
+});

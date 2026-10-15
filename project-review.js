@@ -123,15 +123,19 @@
     const result = assess(input), r = result.review;
     const clean = v => v.replace(/[\r\n]/g,' ').replace(/[<>]/g,'').replace(/([\\`*_[\]#|])/g,'\\$1');
     let out = '# '+clean(r.title)+'\n\n'+r.date+' · '+clean(r.version)+'\n\n'+result.status+'。已有依据 '+result.counts.pass+' 项，发现问题 '+result.counts.fail+' 项，证据待补 '+result.counts.unknown+' 项。\n\n';
+    out += '检查编号：'+clean(r.id)+'\n\n项目编号：'+clean(r.projectId)+'\n\n审阅方式（记录填写）：'+clean(r.reviewer)+'\n\n本检查记录未包含模型用量或耗时，不据此比较资源消耗。\n\n';
     out += clean(r.scope)+'\n\n## 检查边界\n\n'+r.limitations.map(v => '- '+clean(v)).join('\n')+'\n\n材料匹配只检查引文、类型和版本，不证明原始记录真实或推论正确；不构成上线或扩大试用批准。\n\n';
     for (const c of result.rows) {
       out += '## '+clean(c.label)+'\n\n'+statuses[c.status]+' · '+(c.required?'必需':'补充')+'\n\n'+clean(c.summary)+'\n\n';
+      out += '检查项编号：'+clean(c.id)+'。接受 '+c.kinds.map(k=>kinds[k]).join(' / ')+'；'+(c.versionPolicy==='current'?'需要当前版本证据':'允许跨版本材料')+'。\n\n';
+      if(c.downgraded)out += '原填写判断：'+statuses[c.declaredStatus]+'。因引用不符合要求，本报告保留为“证据待补”，未采纳原判断。\n\n';
       if(c.issues.length) out += '引用问题：'+c.issues.map(clean).join('；')+'。\n\n';
       for (const ref of c.refs) {
+        out += '依据：'+clean(ref.evidence.title)+'（'+kinds[ref.evidence.kind]+'；证据编号：'+clean(ref.evidence.id)+'）。\n\n';
         out += '> '+clean(ref.quote)+'\n\n来源：'+clean(ref.evidence.locator)+'；'+ref.evidence.date+'；'+clean(ref.evidence.version)+'。\n\n';
         if(ref.evidence.sha256)out += '原文件 SHA-256（提交者预留）：`'+ref.evidence.sha256+'`。报告未携带当前页面的临时文件核对结果；该值不证明来源真实或结论成立。\n\n';
       }
-      if(c.status !== 'pass') out += '下一步：'+clean(c.next.action)+'。由'+clean(c.next.owner)+'负责。\n\n方法：'+clean(c.next.method)+'\n\n完成证据：'+clean(c.next.doneWhen)+'\n\n';
+      if(c.status !== 'pass') out += '下一步（'+{now:'优先处理',next:'随后验证',later:'条件具备后开展'}[c.next.priority]+'）：'+clean(c.next.action)+'。由'+clean(c.next.owner)+'负责。\n\n方法：'+clean(c.next.method)+'\n\n完成证据：'+clean(c.next.doneWhen)+'\n\n';
     }
     return out;
   }
