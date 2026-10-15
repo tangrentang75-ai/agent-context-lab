@@ -13,6 +13,7 @@ const {preflight,latestPassageStudy} = require('./passage-study.cjs');
 const {latestBundleStudy} = require('./bundle-study.cjs');
 const taskExecution = require('./task-executor.cjs');
 const {readReview} = require('./project-review-store.cjs');
+const {localIdentity}=require('./local-identity.cjs');
 const allowed = {'/':'index.html','/index.html':'index.html','/styles.css':'styles.css','/app.js':'app.js','/evaluation.js':'evaluation.js','/sample-data.js':'sample-data.js','/cost-model.js':'cost-model.js','/cost-ui.js':'cost-ui.js','/review.html':'review.html','/review-planner.js':'review-planner.js','/review-ui.js':'review-ui.js','/review-passages.js':'review-passages.js','/review-results-ui.js':'review-results-ui.js','/passage-results-ui.js':'passage-results-ui.js','/review-bundles.js':'review-bundles.js','/bundle-results-ui.js':'bundle-results-ui.js','/decision.html':'decision.html','/decision.css':'decision.css','/resource-decision.js':'resource-decision.js','/decision-ui.js':'decision-ui.js','/ledger.html':'ledger.html','/task-ledger.js':'task-ledger.js','/ledger-ui.js':'ledger-ui.js','/execution-results-ui.js':'execution-results-ui.js'};
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8'};
 Object.assign(allowed, {'/project-review.html':'project-review.html','/project-review.js':'project-review.js','/project-review-ui.js':'project-review-ui.js','/project-review.css':'project-review.css'});
@@ -30,6 +31,7 @@ return http.createServer(async (req,res)=>{
   let pathname;try{pathname=new URL(req.url,`http://${host}`).pathname;}catch{res.writeHead(400);res.end();return;}
   if(pathname.startsWith('/api/')) {
     if(req.headers.origin && req.headers.origin!==`http://${host}`){json(403,{error:'不允许跨站调用'});return;}
+    if(req.method==='GET'&&pathname==='/api/local-info'){json(200,localIdentity());return;}
     if(req.method==='GET'&&pathname==='/api/project-review'){try{const data=projectReviewReader();json(data?200:404,data||{error:'本机尚无项目检查记录'});}catch{json(409,{error:'本机项目检查记录损坏或格式不符，请检查原文件；未执行任何测试'});}return;}
     if(req.method==='GET'&&pathname==='/api/status'){json(200,{...await executor.connectionStatus(),running,hasLatest:!!executor.latest()});return;}
     if(req.method==='GET'&&pathname==='/api/latest'){const data=executor.latest();json(data?200:404,data||{error:'尚无真实记录'});return;}
