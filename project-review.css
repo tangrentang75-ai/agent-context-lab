@@ -3,3 +3,4 @@ dialog{width:min(850px,calc(100vw - 32px));max-height:90vh;overflow:auto;border:
 .source code{display:block;margin:6px 0 10px;overflow-wrap:anywhere}.source button{max-width:100%;white-space:normal;text-align:left;border-color:var(--border);margin-bottom:6px}.source [role=status]{padding:10px 12px;background:#f3f4f8;border-radius:6px;color:#525a70}
 
 .backup-link{display:inline-flex;align-items:center;min-height:42px;padding:8px 12px;border:1px solid var(--border);border-radius:7px;background:#fff;color:var(--accent);font-size:13px}#review-backup{scroll-margin-top:24px}
+.record-storage{padding:12px 16px;margin:-8px 0 22px;border:1px solid var(--border);border-radius:8px;background:#fff}.record-storage p{font-size:13px;color:#62677a}.record-storage button{font-size:12px}

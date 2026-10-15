@@ -13,6 +13,10 @@
   function storageInfo(){
     $('saved-count').textContent=storageBlocked?'保存区无法完整读取，已保留原数据。请先处理读取问题。':'当前浏览器已保存 '+saved.length+' / 10份检查记录。备份只生成本机下载文件，不自动上传。';
     $('export-backup').disabled=storageBlocked||!saved.length;
+    const c=current(),stored=c&&saved.some(r=>r.id===c.id);
+    $('record-storage').textContent=storageBlocked?'无法确认当前记录的保存状态，原保存区未改动。':!c?'选择一份记录后，可以查看它是否已经保存。':stored?'当前记录已保存在此浏览器，包含在整批备份中。':'当前记录只在本页打开，未包含在整批备份中。可以单独导出，或保存到此浏览器。';
+    $('save-current').disabled=storageBlocked||!c||!!stored;
+    $('remove-current').disabled=storageBlocked||!stored;
   }
   function addRecords(incoming){
     const next=[...records];
@@ -27,7 +31,10 @@
   function persistBatch(incoming){
     if(storageBlocked)throw Error('本页保存区暂不可写，请先处理底部的损坏记录提示。');
     for(const r of incoming){const old=records.find(x=>x.id===r.id);if(old&&!same(old,r))throw Error('相同编号已有不同内容：'+r.id+'。未覆盖原记录。');}
-    const next=B.merge(saved,incoming);
+    writeSaved(B.merge(saved,incoming));
+  }
+  function writeSaved(next){
+    if(storageBlocked)throw Error('本页保存区暂不可写，请先处理底部的损坏记录提示。');
     if(localStorage.getItem(KEY)!==savedRaw)throw Error('另一页面改变了保存记录，请刷新后重试，避免覆盖。');
     const value=JSON.stringify(next);if(value.length>4000000)throw Error('导入记录总量过大，请先导出备份。');
     localStorage.setItem(KEY,value);saved=next;savedRaw=value;storageInfo();
@@ -122,6 +129,25 @@
   $('export-report').addEventListener('click',()=>download(current().id+'.md',R.markdown(current()),'text/markdown;charset=utf-8'));
   $('export-review').addEventListener('click',()=>download(current().id+'.json',JSON.stringify(current(),null,2),'application/json'));
   $('export-dataset').addEventListener('click',()=>download(current().id+'-验收导入.json',JSON.stringify(R.toDataset(current()),null,2),'application/json'));
+  $('save-current').addEventListener('click',()=>{try{
+    const c=current();if(!c)throw Error('请先选择记录。');
+    persist(c);selectionEpoch++;notice('当前记录已保存到此浏览器，现在会包含在整批备份中。来源和检查结论未改变。');
+  }catch(e){notice('没有保存：'+e.message,true);}});
+  let removal=null;
+  $('remove-current').addEventListener('click',()=>{try{
+    const c=current();if(!c||!saved.some(r=>r.id===c.id))throw Error('当前记录不在浏览器保存区。');
+    removal={id:c.id,raw:savedRaw};selectionEpoch++;
+    $('remove-description').textContent=c.title+' · '+c.date+' · '+c.version+'（编号：'+c.id+'）';
+    $('remove-notice').textContent='请先导出需要保留的数据。其他轮次不受影响，电脑源文件不会删除。';$('remove-dialog').showModal();
+  }catch(e){notice('无法准备移除：'+e.message,true);}});
+  $('remove-cancel').addEventListener('click',()=>{$('remove-dialog').close();removal=null;});
+  $('remove-dialog').addEventListener('cancel',()=>{removal=null;});
+  $('remove-confirm').addEventListener('click',()=>{try{
+    if(!removal)throw Error('请重新选择要移除的记录。');
+    if(savedRaw!==removal.raw)throw Error('保存区已改变，请关闭窗口后重新选择。');
+    writeSaved(saved.filter(r=>r.id!==removal.id));selectionEpoch++;removal=null;$('remove-dialog').close();
+    notice('已将这一份记录移出浏览器保存区，其他记录保留。本页仍可导出或重新保存；本机接口若仍提供此记录，刷新后可能再次显示，但不会自动保存。');
+  }catch(e){$('remove-notice').textContent='没有移除：'+e.message;}});
   $('export-backup').addEventListener('click',()=>{try{
     if(storageBlocked||!saved.length)throw Error('没有可完整备份的已保存记录。');
     if(localStorage.getItem(KEY)!==savedRaw)throw Error('另一页面改变了保存记录，请刷新后备份。');

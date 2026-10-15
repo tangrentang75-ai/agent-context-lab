@@ -100,3 +100,43 @@ test('没有附带案例不掩盖损坏保存区；服务器损坏仍明确显�
   const h=harness({storage:new Map([[KEY,'broken']]),fetcher:async()=>({status:404,ok:false})});await tick();assert.equal(h.get('notice').classes.has('error'),true);assert.match(h.get('notice').textContent,/保存区无法读取.*原数据已保留/);assert.equal(h.storage.get(KEY),'broken');
   const g=harness({storage:new Map([[KEY,JSON.stringify([record('saved')])]]),fetcher:async()=>({status:409,ok:false,json:async()=>({error:'案例损坏'})})});await tick();assert.equal(g.get('notice').classes.has('error'),true);assert.match(g.get('notice').textContent,/案例损坏/);assert.equal(g.get('record-select').value,'saved');
 });
+
+test('本机读取记录明确标为未保存，单独保存后才进入备份，重复保存不增加记录',async()=>{
+  const local=record('local'),h=harness({fetcher:async()=>({ok:true,json:async()=>({current:local})})});await tick();
+  assert.match(h.get('record-storage').textContent,/未包含/);assert.equal(h.get('save-current').disabled,false);assert.equal(h.get('remove-current').disabled,true);assert.equal(h.storage.get(KEY),undefined);
+  await h.get('save-current').click();assert.deepEqual(JSON.parse(h.storage.get(KEY)),[local]);assert.match(h.get('record-storage').textContent,/已保存在/);assert.equal(h.get('save-current').disabled,true);
+  await h.get('save-current').click();await h.get('export-backup').click();assert.deepEqual(JSON.parse(await h.downloads[0].text()).records,[local]);
+});
+
+test('移除单份存档需确认，保留其他轮次和本页记录，刷新只恢复剩余存档',async()=>{
+  const a=record('first'),b=record('second'),storage=new Map([[KEY,JSON.stringify([a,b])]]);
+  const h=harness({storage});await tick();
+  await h.get('remove-current').click();assert.equal(JSON.parse(storage.get(KEY)).length,2);assert.match(h.get('remove-description').textContent,/second/);assert.match(h.get('remove-notice').textContent,/其他轮次不受影响/);await h.get('remove-cancel').click();assert.equal(h.get('remove-dialog').open,false);assert.equal(JSON.parse(storage.get(KEY)).length,2);
+  await h.get('remove-current').click();await h.get('remove-confirm').click();assert.deepEqual(JSON.parse(storage.get(KEY)),[a]);assert.equal(h.get('record-select').value,'second');assert.equal(h.get('review-title').textContent,'second');assert.match(h.get('record-storage').textContent,/未包含/);assert.equal(h.get('save-current').disabled,false);assert.equal(h.get('remove-current').disabled,true);
+  const fresh=harness({storage});await tick();assert.equal(fresh.get('record-select').value,'first');assert.equal(fresh.get('record-select').children.length,1);
+  await h.get('save-current').click();assert.deepEqual(JSON.parse(storage.get(KEY)),[a,b]);
+});
+
+test('满10份时拒绝额外保存，移除选定存档后可保存新记录且不更改其他内容',async()=>{
+  const originals=Array.from({length:10},(_,i)=>record('r'+i)),storage=new Map([[KEY,JSON.stringify(originals)]]),local=record('local');
+  const h=harness({storage,confirmAction:()=>true,fetcher:async()=>({ok:true,json:async()=>({current:local})})});await tick();const before=storage.get(KEY);
+  await h.get('save-current').click();assert.equal(storage.get(KEY),before);assert.match(h.get('notice').textContent,/10/);assert.match(h.get('record-storage').textContent,/未包含/);
+  h.get('record-select').value='r4';await h.get('record-select').emit('change');await h.get('remove-current').click();await h.get('remove-confirm').click();h.get('record-select').value='local';await h.get('record-select').emit('change');await h.get('save-current').click();
+  assert.deepEqual(JSON.parse(storage.get(KEY)),[...originals.filter(r=>r.id!=='r4'),local]);assert.match(h.get('saved-count').textContent,/10 \/ 10/);
+});
+
+test('单份移除拒绝确认期间另一页的变更，也不将写入失败表现为已移除',async()=>{
+  const base=record('base'),storage=new Map([[KEY,JSON.stringify([base])]]),external=JSON.stringify([base,record('external')]);
+  const h=harness({storage});await tick();await h.get('remove-current').click();storage.set(KEY,external);await h.get('remove-confirm').click();assert.equal(storage.get(KEY),external);assert.match(h.get('remove-notice').textContent,/另一页面/);assert.equal(h.get('remove-dialog').open,true);assert.match(h.get('record-storage').textContent,/已保存在/);
+  const second=new Map([[KEY,JSON.stringify([base])]]),g=harness({storage:second});await tick();second.set=()=>{throw Error('write denied');};await g.get('remove-current').click();await g.get('remove-confirm').click();assert.deepEqual(JSON.parse(second.get(KEY)),[base]);assert.match(g.get('remove-notice').textContent,/没有移除.*write denied/);assert.equal(g.get('remove-current').disabled,false);
+});
+
+test('单份移除取消正在读取的导入；全部移除后备份不可用，记录仍可重新保存',async()=>{
+  const h=harness();await tick();await h.import(file(record('base')));const slow=deferred(),pending=h.restoreBackup({size:100,text:()=>slow.promise});await h.get('remove-current').click();await h.get('remove-confirm').click();slow.resolve(JSON.stringify(B.create([record('late')])));await pending;
+  assert.deepEqual(JSON.parse(h.storage.get(KEY)),[]);assert.equal(h.get('export-backup').disabled,true);assert.equal(h.get('record-select').value,'base');assert.match(h.get('notice').textContent,/已将这一份/);await h.get('save-current').click();assert.equal(JSON.parse(h.storage.get(KEY))[0].id,'base');
+});
+
+test('保存区损坏或没有当前记录时不提供单份保存与移除操作',async()=>{
+  const local=record('local'),storage=new Map([[KEY,'broken']]),h=harness({storage,fetcher:async()=>({ok:true,json:async()=>({current:local})})});await tick();assert.equal(h.get('save-current').disabled,true);assert.equal(h.get('remove-current').disabled,true);assert.match(h.get('record-storage').textContent,/无法确认/);assert.equal(storage.get(KEY),'broken');
+  const empty=harness({fetcher:async()=>({status:404,ok:false})});await tick();assert.equal(empty.get('save-current').disabled,true);assert.equal(empty.get('remove-current').disabled,true);assert.match(empty.get('record-storage').textContent,/选择一份/);
+});

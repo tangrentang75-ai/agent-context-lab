@@ -15,6 +15,7 @@
     <section class="intro"><div><p class="eyebrow">从“做出来了”到“确实有用”</p><h1>项目下一步，该做什么？</h1><p class="subtitle">先看证据能说明什么，再安排值得投入的工作。</p></div><div class="actions"><button id="create-project" class="primary">开始新项目检查</button><button id="load-local">读取银龄净网最新检查</button><button id="import-review">导入检查记录</button><a class="backup-link" href="#review-backup">备份与恢复</a><input id="review-file" type="file" accept=".json,application/json" hidden></div></section>
     <p id="notice" class="notice" role="status" aria-live="polite">正在读取本机已保存的项目检查…</p>
     <section class="toolbar" aria-label="记录与导出"><label>查看记录<select id="record-select" disabled><option>暂无记录</option></select></label><div class="actions"><button id="new-round" disabled>记录新一轮检查</button><button id="export-report" disabled>导出报告</button><button id="export-review" disabled>导出检查数据</button><button id="export-dataset" disabled>导出首页验收数据</button></div></section>
+    <section class="record-storage" aria-label="当前记录的保存状态"><p id="record-storage" role="status"></p><div class="actions"><button id="save-current" disabled>保存当前记录到浏览器</button><button id="remove-current" class="quiet" disabled>仅移除当前记录的浏览器存档</button></div></section>
     <section id="empty" class="empty" hidden><h2>还没有检查记录</h2><p>点击上方“开始新项目检查”，填写目标和验证方法。也可以导入以前导出的记录，或读取本机银龄净网资料。</p><button id="template">下载空白模板</button></section>
     <div id="result" hidden>
       <section class="overview"><div class="summary"><p class="eyebrow" id="review-date"></p><h2 id="review-title"></h2><p id="review-scope"></p><p id="verdict" class="verdict"></p><p id="review-origin" class="fine"></p></div><div id="metrics" class="metrics" aria-label="检查项统计"></div></section>
@@ -45,8 +46,13 @@
       </details>
     </section>
     <section id="review-backup" tabindex="-1" class="section boundaries" aria-labelledby="backup-title"><h2 id="backup-title">把检查记录带走</h2><p id="saved-count" role="status"></p><p>备份当前浏览器保存的项目检查及历次记录。电脑源文件、仅从本机接口读取的记录、广告观察计划和临时核对结果不在其中。恢复时与现有记录合并；同编号不同内容会整批拒绝。</p><div class="actions"><button id="export-backup" disabled>备份全部已保存检查</button><button id="import-backup">恢复检查备份</button><input id="backup-file" type="file" accept=".json,application/json" hidden></div></section>
-    <footer><p>任务罗盘 · 项目体检 v0.24.3<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除本页保存的导入记录</button></footer>
+    <footer><p>任务罗盘 · 项目体检 v0.25.0<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除全部浏览器存档</button></footer>
   </main>
+  <dialog id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-description">
+    <h2 id="remove-title">只移除这一份浏览器存档？</h2><p id="remove-description"></p>
+    <p>本页仍可查看、导出或重新保存。刷新后，不再从浏览器恢复这一份；如果本机接口仍提供它，页面可能再次显示，但不会自动保存。</p>
+    <p id="remove-notice" class="notice" role="status"></p><div class="actions"><button id="remove-cancel" type="button" autofocus>保留这份记录</button><button id="remove-confirm" type="button">确认移出保存区</button></div>
+  </dialog>
   <dialog id="project-builder" aria-labelledby="builder-title">
     <div class="heading"><h2 id="builder-title">先说清楚，这个项目要做到什么</h2><button id="builder-close" type="button">关闭新项目窗口</button></div>
     <p>每个检查项写一个能观察的目标，并说明怎么验证、什么记录才算有依据。保存后全部标为“证据待补”，再通过“记录新一轮检查”补实际证据。</p>
