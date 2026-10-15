@@ -1,6 +1,6 @@
 {
   "name": "agent-context-lab",
-  "version": "0.24.1",
+  "version": "0.24.2",
   "private": true,
   "description": "Goal-driven AI task evaluation prototype",
   "scripts": {

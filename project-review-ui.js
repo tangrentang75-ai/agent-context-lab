@@ -1,7 +1,7 @@
 'use strict';
 (() => {
   const R=window.ProjectReview,B=window.ProjectReviewBackup,$=id=>document.getElementById(id),KEY='acl-project-reviews-v1';
-  let records=[],selected='',baseline=null,saved=[],savedRaw=null,storageBlocked=false,selectionEpoch=0;
+  let records=[],selected='',baseline=null,saved=[],savedRaw=null,storageBlocked=false,storageProblem='',selectionEpoch=0;
   const fileChecks=new Map(),fileCheckNodes=new Map(),fileCheckEpochs=new Map();let requestedFileCheck=null;
   function showFileCheck(key){for(const el of fileCheckNodes.get(key)||[])el.textContent=fileChecks.get(key)||'本页尚未核对原文件。最大20MiB，仅在本机计算，不上传文件。';}
   function node(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
@@ -21,7 +21,7 @@
   }
   function restore(){
     try{savedRaw=localStorage.getItem(KEY);if(savedRaw!==null){if(savedRaw.length>B.MAX_CHARS)throw Error('保存的数据过大');saved=B.records(JSON.parse(savedRaw));addRecords(saved);}}
-    catch(e){storageBlocked=true;notice('已保存的导入记录无法读取；不会覆盖原数据。可先导出其他记录，或使用底部清除按钮。'+e.message,true);}
+    catch(e){storageBlocked=true;storageProblem=e.message;notice('已保存的导入记录无法读取；不会覆盖原数据。可先导出其他记录，或使用底部清除按钮。'+e.message,true);}
   }
   function persist(record){persistBatch([record]);}
   function persistBatch(incoming){
@@ -87,8 +87,14 @@
   async function load(){
     const generation=++selectionEpoch;
     $('load-local').disabled=true;
-    try{const response=await fetch('/api/project-review',{cache:'no-store'});if(!response.ok){let message='读取失败';try{message=(await response.json()).error||message;}catch{}throw Error(message);}const data=await response.json();addRecords([...(data.baseline?[data.baseline]:[]),data.current]);if(generation===selectionEpoch){selected=data.current.id;baseline=data.baseline?.id||'';notice('已读取本机保存的审阅结果。没有发起模型调用或设备测试。'+(storageBlocked?' 导入保存区不可写，需单独处理。':''));}render();}
-    catch(e){if(!selected)selected=records.at(-1)?.id||'';render();if(generation===selectionEpoch)notice(e.message+'。可导入已导出的检查数据。',true);}finally{$('load-local').disabled=false;}
+    const localNotice=(message,error=false)=>{if(generation===selectionEpoch)notice(message+(storageBlocked?' 浏览器保存区无法读取，原数据已保留：'+storageProblem:''),error||storageBlocked);};
+    try{
+      const response=await fetch('/api/project-review',{cache:'no-store'});
+      if(response.status===404){if(!selected)selected=records.at(-1)?.id||'';render();localNotice('本机没有附带案例。可以查看已保存的检查、新建项目，或导入检查数据及备份。');return;}
+      if(!response.ok){let message='读取失败';try{message=(await response.json()).error||message;}catch{}throw Error(message);}
+      const data=await response.json();addRecords([...(data.baseline?[data.baseline]:[]),data.current]);
+      if(generation===selectionEpoch){selected=data.current.id;baseline=data.baseline?.id||'';localNotice('已读取本机保存的审阅结果。没有发起模型调用或设备测试。');}render();
+    }catch(e){if(!selected)selected=records.at(-1)?.id||'';render();localNotice(e.message+'。当前可读记录仍可查看；请检查本机服务或原文件。',true);}finally{$('load-local').disabled=false;}
   }
   $('load-local').addEventListener('click',load);
   $('evidence-file').addEventListener('change',async event=>{

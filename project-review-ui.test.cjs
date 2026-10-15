@@ -93,3 +93,10 @@ test('清除拒绝过期页面；清除成功后正在读取的导入不能悄�
   const storage=new Map([[KEY,JSON.stringify([record('base')])]]),h=harness({storage,confirmAction:()=>true});await tick();storage.set(KEY,JSON.stringify([record('external')]));await h.get('clear-saved').click();assert.equal(JSON.parse(storage.get(KEY))[0].id,'external');assert.match(h.get('notice').textContent,/另一页面/);
   const g=harness({confirmAction:()=>true});await tick();await g.import(file(record('base')));const slow=deferred(),pending=g.restoreBackup({size:100,text:()=>slow.promise});await g.get('clear-saved').click();slow.resolve(JSON.stringify(B.create([record('late')])));await pending;assert.equal(g.storage.get(KEY),undefined);assert.equal(g.get('export-backup').disabled,true);assert.match(g.get('saved-count').textContent,/0 \/ 10/);
 });
+test('无附带案例是正常状态，首次使用和已有保存记录均不显示红色故障',async()=>{
+  for(const storage of [new Map(),new Map([[KEY,JSON.stringify([record('saved')])]])]){const h=harness({storage,fetcher:async()=>({status:404,ok:false})});await tick();assert.equal(h.get('notice').classes.has('error'),false);assert.match(h.get('notice').textContent,/没有附带案例/);if(storage.size)assert.equal(h.get('record-select').value,'saved');else assert.equal(h.get('empty').hidden,false);}
+});
+test('没有附带案例不掩盖损坏保存区；服务器损坏仍明确显示故障',async()=>{
+  const h=harness({storage:new Map([[KEY,'broken']]),fetcher:async()=>({status:404,ok:false})});await tick();assert.equal(h.get('notice').classes.has('error'),true);assert.match(h.get('notice').textContent,/保存区无法读取.*原数据已保留/);assert.equal(h.storage.get(KEY),'broken');
+  const g=harness({storage:new Map([[KEY,JSON.stringify([record('saved')])]]),fetcher:async()=>({status:409,ok:false,json:async()=>({error:'案例损坏'})})});await tick();assert.equal(g.get('notice').classes.has('error'),true);assert.match(g.get('notice').textContent,/案例损坏/);assert.equal(g.get('record-select').value,'saved');
+});
