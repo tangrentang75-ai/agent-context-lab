@@ -11,8 +11,10 @@
   function download(name,text,type){const url=URL.createObjectURL(new Blob([text],{type}));const a=node('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function same(a,b){return JSON.stringify(a)===JSON.stringify(b);}
   function storageInfo(){
-    $('saved-count').textContent=storageBlocked?'保存区无法完整读取，已保留原数据。请先处理读取问题。':'当前浏览器已保存 '+saved.length+' / 10份检查记录。备份只生成本机下载文件，不自动上传。';
+    $('saved-count').textContent=storageBlocked?'保存区无法完整读取，未覆盖原数据。'+(typeof savedRaw==='string'?'可下载排查文件留存，再核对损坏原因。':'浏览器未返回原内容，暂时无法生成排查文件。'):'当前浏览器已保存 '+saved.length+' / 10份检查记录。备份只生成本机下载文件，不自动上传。';
     $('export-backup').disabled=storageBlocked||!saved.length;
+    $('export-storage-recovery').hidden=!storageBlocked||typeof savedRaw!=='string';
+    $('export-storage-recovery').disabled=!storageBlocked||typeof savedRaw!=='string';
     const c=current(),stored=c&&saved.some(r=>r.id===c.id);
     $('record-storage').textContent=storageBlocked?'无法确认当前记录的保存状态，原保存区未改动。':!c?'选择一份记录后，可以查看它是否已经保存。':stored?'当前记录已保存在此浏览器，包含在整批备份中。':'当前记录只在本页打开，未包含在整批备份中。可以单独导出，或保存到此浏览器。';
     $('save-current').disabled=storageBlocked||!c||!!stored;
@@ -25,7 +27,7 @@
   }
   function restore(){
     try{savedRaw=localStorage.getItem(KEY);if(savedRaw!==null){if(savedRaw.length>B.MAX_CHARS)throw Error('保存的数据过大');saved=B.records(JSON.parse(savedRaw));addRecords(saved);}}
-    catch(e){storageBlocked=true;storageProblem=e.message;notice('已保存的导入记录无法读取；不会覆盖原数据。可先导出其他记录，或使用底部清除按钮。'+e.message,true);}
+    catch(e){storageBlocked=true;storageProblem=e.message;notice('已保存的导入记录无法读取；不会覆盖原数据。请查看底部保存区提示。'+e.message,true);}
   }
   function persist(record){persistBatch([record]);}
   function persistBatch(incoming){
@@ -154,6 +156,13 @@
     const backup=B.create(saved);download('项目检查备份-'+backup.exportedAt.replace(/[:.]/g,'-')+'.json',JSON.stringify(backup),'application/json');
     notice('已生成 '+saved.length+' 份已保存检查的备份下载。请确认文件下载完成并妥善保存；未上传资料。');
   }catch(e){notice('备份未完成：'+e.message,true);}});
+  $('export-storage-recovery').addEventListener('click',()=>{try{
+    if(!storageBlocked||typeof savedRaw!=='string')throw Error('当前没有已读到的损坏保存内容。');
+    if(localStorage.getItem(KEY)!==savedRaw)throw Error('另一页面改变了保存记录，请刷新后重新下载排查文件。');
+    const recovery={schema:'project-review-storage-recovery-v1',exportedAt:new Date().toISOString(),storageKey:KEY,raw:savedRaw};
+    download('项目检查保存区排查-'+recovery.exportedAt.replace(/[:.]/g,'-')+'.json',JSON.stringify(recovery),'application/json');
+    notice('已生成保存区排查文件，原数据未清除或修复。它保留原始保存文本，不是可直接恢复的检查备份；请确认下载完成后保管好。');
+  }catch(e){notice('排查文件未生成：'+e.message,true);}});
   $('import-backup').addEventListener('click',()=>$('backup-file').click());
   $('backup-file').addEventListener('change',async event=>{
     const file=event.target.files[0];event.target.value='';if(!file)return;const generation=++selectionEpoch;

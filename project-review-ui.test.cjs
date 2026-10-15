@@ -146,3 +146,15 @@ test('原记录日期晚于本机日期时仍能打开新轮次窗口，并提�
   assert.equal(h.get('editor').open,true);assert.equal(h.get('edit-date').value,future.date);assert.match(h.get('editor-notice').textContent,/原记录日期晚于本机今天/);assert.deepEqual(JSON.parse(storage.get(KEY)),[future]);
   h.get('edit-date').value='2026-10-15';h.get('edit-reviewer').value='软件测试';h.get('edit-scope').value='软件测试';await h.get('editor-save').click();assert.equal(h.get('editor').open,true);assert.match(h.get('editor-notice').textContent,/不能早于/);assert.deepEqual(JSON.parse(storage.get(KEY)),[future]);
 });
+
+test('损坏保存区可原样下载排查封装，不修复、不覆盖，也不能误当正常备份恢复',async()=>{
+  const raw='broken\r\n含节选与未配对字符\ud800',storage=new Map([[KEY,raw]]),h=harness({storage});await tick();assert.equal(h.get('export-storage-recovery').hidden,false);assert.equal(h.get('export-storage-recovery').disabled,false);assert.equal(h.get('export-backup').disabled,true);
+  await h.get('export-storage-recovery').click();const recovery=JSON.parse(await h.downloads[0].text());assert.equal(recovery.schema,'project-review-storage-recovery-v1');assert.equal(recovery.storageKey,KEY);assert.equal(recovery.raw,raw);assert.equal(storage.get(KEY),raw);assert.equal(h.get('export-backup').disabled,true);assert.match(h.get('notice').textContent,/不是可直接恢复/);
+  await h.restoreBackup(file(recovery));assert.match(h.get('notice').textContent,/需要项目检查备份格式/);assert.equal(storage.get(KEY),raw);
+});
+
+test('正常保存区不显示排查入口；损坏快照过期或读取被拒绝时不导出过期内容',async()=>{
+  const normal=harness({storage:new Map([[KEY,JSON.stringify([record('base')])]])});await tick();assert.equal(normal.get('export-storage-recovery').hidden,true);await normal.get('export-storage-recovery').click();assert.equal(normal.downloads.length,0);
+  const storage=new Map([[KEY,'broken']]),h=harness({storage});await tick();storage.set(KEY,'newer broken');await h.get('export-storage-recovery').click();assert.equal(h.downloads.length,0);assert.match(h.get('notice').textContent,/另一页面/);assert.equal(storage.get(KEY),'newer broken');
+  const blocked=new Map();blocked.get=()=>{throw Error('read denied');};const g=harness({storage:blocked});await tick();assert.equal(g.get('export-storage-recovery').hidden,true);assert.equal(g.get('export-storage-recovery').disabled,true);assert.equal(g.get('export-backup').disabled,true);
+});
