@@ -29,7 +29,7 @@
       <details class="boundaries observation-panel"><summary>准备下一轮广告观察 · 建计划、填记录、查遗漏</summary>
         <p>先保存原定计划，再填写实际记录。即使表格里删掉了某一轮，也能查出遗漏。空白和未知不会算成“0个广告”。</p>
         <label for="observation-plan-select">用于核对的独立计划</label><select id="observation-plan-select"><option value="">未选择独立计划</option></select>
-        <p id="observation-plan-status" role="status" style="overflow-wrap:anywhere"></p>
+        <p id="observation-plan-status" role="status" style="overflow-wrap:anywhere"></p><p id="plan-notice" role="status"></p>
         <details id="observation-plan-editor"><summary>建立一份8轮观察计划</summary><div class="edit-grid">
           <label>计划名称<input id="plan-title" maxlength="200"></label>
           <label>银龄净网版本<input id="plan-software" maxlength="120"></label>
@@ -46,7 +46,7 @@
       </details>
     </section>
     <section id="review-backup" tabindex="-1" class="section boundaries" aria-labelledby="backup-title"><h2 id="backup-title">把检查记录带走</h2><p id="saved-count" role="status"></p><p>备份当前浏览器保存的项目检查及历次记录。电脑源文件、仅从本机接口读取的记录、广告观察计划和临时核对结果不在其中。恢复时与现有记录合并；同编号不同内容会整批拒绝。</p><div class="actions"><button id="export-backup" disabled>备份全部已保存检查</button><button id="import-backup">恢复检查备份</button><input id="backup-file" type="file" accept=".json,application/json" hidden></div></section>
-    <footer><p>任务罗盘 · 项目体检 v0.25.0<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除全部浏览器存档</button></footer>
+    <footer><p>任务罗盘 · 项目体检 v0.25.1<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除全部浏览器存档</button></footer>
   </main>
   <dialog id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-description">
     <h2 id="remove-title">只移除这一份浏览器存档？</h2><p id="remove-description"></p>

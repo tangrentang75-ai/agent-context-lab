@@ -197,10 +197,11 @@
   }
   $('new-round').addEventListener('click',()=>{
     selectionEpoch++;
-    draftBase=current();draft=R.newRound(draftBase,{id:'review-'+crypto.randomUUID(),date:new Date().toLocaleDateString('sv-SE')});editedId=draft.criteria[0].id;
+    draftBase=current();const today=new Date().toLocaleDateString('sv-SE'),futureDate=draftBase.date>today;
+    draft=R.newRound(draftBase,{id:'review-'+crypto.randomUUID(),date:futureDate?draftBase.date:today});editedId=draft.criteria[0].id;
     $('edit-date').value=draft.date;$('edit-version').value=draft.version;$('edit-reviewer').value='';$('edit-scope').value='';
     $('edit-criterion').replaceChildren(...draft.criteria.map(c=>option(c.id,c.label)));$('edit-criterion').value=editedId;
-    $('editor-notice').textContent='请先填写本轮日期、版本、实际审阅方式和检查范围，再逐项更新。';showCriterion();$('editor').showModal();
+    $('editor-notice').textContent=(futureDate?'原记录日期晚于本机今天。已暂填原记录日期，请核对电脑时间与原记录，填写实际检查日期；新一轮不能早于原记录。 ':'')+'请先填写本轮日期、版本、实际审阅方式和检查范围，再逐项更新。';showCriterion();$('editor').showModal();
   });
   $('editor-close').addEventListener('click',()=>$('editor').close());
   $('edit-criterion').addEventListener('change',()=>{const next=$('edit-criterion').value;try{commitCriterion();editedId=next;showCriterion();$('editor-notice').textContent='上一项已暂存到草稿，尚未写入浏览器。';}catch(e){$('edit-criterion').value=editedId;$('editor-notice').textContent=e.message;}});

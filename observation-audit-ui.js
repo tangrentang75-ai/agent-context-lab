@@ -5,6 +5,7 @@
   const node=(tag,text)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;return e;};
   const active=()=>plans.find(e=>e.plan.id===activeId);
   const notice=text=>{$('observation-notice').textContent=text;};
+  const planNotice=text=>{$('plan-notice').textContent=text;};
   function download(name,text,type){const url=URL.createObjectURL(new Blob([text],{type})),a=node('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
   function exportPlan(){const e=active();if(e)download(e.plan.id+'.json',JSON.stringify(e,null,2),'application/json');}
   function planOptions(){
@@ -49,6 +50,7 @@
   $('observation-import').addEventListener('click',()=>$('observation-file').click());
   $('observation-file').addEventListener('change',async event=>{
     const file=event.target.files[0];event.target.value='';if(!file)return;const generation=++csvGeneration;
+    csvText=null;result=null;$('observation-results').replaceChildren();$('observation-export').disabled=true;notice('正在读取 '+file.name+'，完成后才能导出本次检查。');
     try{if(file.size>2000000)throw Error('文件超过2MB');const text=await file.text();if(generation!==csvGeneration)return;csvText=text;csvName=file.name;render();}
     catch(e){if(generation!==csvGeneration)return;csvText=null;result=null;$('observation-results').replaceChildren();$('observation-export').disabled=true;notice('未完成检查：'+e.message);}
   });
@@ -60,19 +62,19 @@
     try{
       const context={softwareVersion:$('plan-software').value,targetAppVersion:$('plan-app').value,deviceAlias:$('plan-device').value,network:$('plan-network').value,taskId:$('plan-task-id').value};
       const envelope=await P.seal({schema:'observation-plan-v1',id:'plan-'+crypto.randomUUID(),title:$('plan-title').value,createdAt:new Date().toISOString(),context,task:$('plan-task').value,primaryMeasure:$('plan-measure').value,durationSeconds:Number($('plan-duration').value),rounds:[...'ABBABAAB'].map((condition,i)=>({number:i+1,condition}))});
-      if(generation!==planGeneration)return;save(envelope);exportPlan();notice('计划已保存并导出。请下载对应空表；这一步没有产生实际观察结果。');
-    }catch(e){if(generation===planGeneration)notice('计划未保存：'+e.message);}finally{$('plan-create').disabled=false;}
+      if(generation!==planGeneration)return;save(envelope);exportPlan();planNotice('计划已保存并导出。请下载对应空表；这一步没有产生实际观察结果。');
+    }catch(e){if(generation===planGeneration)planNotice('计划未保存：'+e.message);}finally{$('plan-create').disabled=false;}
   });
   $('plan-import').addEventListener('click',()=>$('plan-file').click());
   $('plan-file').addEventListener('change',async event=>{
     const file=event.target.files[0];event.target.value='';if(!file)return;const generation=++planGeneration;
-    try{if(file.size>500000)throw Error('计划文件超过500KB');const envelope=await P.verify(JSON.parse(await file.text()));if(generation!==planGeneration)return;save(envelope);notice('计划内容校验通过并已导入。校验不证明实际记录或建立时间真实。');}
-    catch(e){if(generation===planGeneration)notice('计划未导入，当前计划保持不变：'+e.message);}
+    try{if(file.size>500000)throw Error('计划文件超过500KB');const envelope=await P.verify(JSON.parse(await file.text()));if(generation!==planGeneration)return;save(envelope);planNotice('计划内容校验通过并已导入。校验不证明实际记录或建立时间真实。');}
+    catch(e){if(generation===planGeneration)planNotice('计划未导入，当前计划保持不变：'+e.message);}
   });
   (async()=>{
     $('plan-create').disabled=true;$('plan-import').disabled=true;
     try{savedRaw=localStorage.getItem(KEY);if(savedRaw!==null){if(savedRaw.length>500000)throw Error('保存的计划超出上限');const parsed=JSON.parse(savedRaw);if(!Array.isArray(parsed)||parsed.length>10)throw Error('计划列表格式无效');plans=await Promise.all(parsed.map(P.verify));if(new Set(plans.map(e=>e.plan.id)).size!==plans.length)throw Error('计划编号重复');}planOptions();}
-    catch(e){plans=[];blocked=true;notice('已有计划未能载入，原内容已保留：'+e.message);}
+    catch(e){plans=[];blocked=true;planNotice('已有计划未能载入，原内容已保留：'+e.message);}
     finally{$('plan-create').disabled=false;$('plan-import').disabled=false;}
   })();
 })();

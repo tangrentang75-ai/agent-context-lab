@@ -140,3 +140,9 @@ test('保存区损坏或没有当前记录时不提供单份保存与移除操�
   const local=record('local'),storage=new Map([[KEY,'broken']]),h=harness({storage,fetcher:async()=>({ok:true,json:async()=>({current:local})})});await tick();assert.equal(h.get('save-current').disabled,true);assert.equal(h.get('remove-current').disabled,true);assert.match(h.get('record-storage').textContent,/无法确认/);assert.equal(storage.get(KEY),'broken');
   const empty=harness({fetcher:async()=>({status:404,ok:false})});await tick();assert.equal(empty.get('save-current').disabled,true);assert.equal(empty.get('remove-current').disabled,true);assert.match(empty.get('record-storage').textContent,/选择一份/);
 });
+
+test('原记录日期晚于本机日期时仍能打开新轮次窗口，并提示核对而非改写原记录',async()=>{
+  const future={...record('future'),date:'9999-12-31'},storage=new Map([[KEY,JSON.stringify([future])]]),h=harness({storage});await tick();await h.get('new-round').click();
+  assert.equal(h.get('editor').open,true);assert.equal(h.get('edit-date').value,future.date);assert.match(h.get('editor-notice').textContent,/原记录日期晚于本机今天/);assert.deepEqual(JSON.parse(storage.get(KEY)),[future]);
+  h.get('edit-date').value='2026-10-15';h.get('edit-reviewer').value='软件测试';h.get('edit-scope').value='软件测试';await h.get('editor-save').click();assert.equal(h.get('editor').open,true);assert.match(h.get('editor-notice').textContent,/不能早于/);assert.deepEqual(JSON.parse(storage.get(KEY)),[future]);
+});
