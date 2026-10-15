@@ -15,7 +15,7 @@
       if (!task || typeof task !== 'object') fail(`${p} 不是任务对象`);
       for (const field of ['id', 'title', 'description']) string(task[field], `${p}.${field}`);
       if (taskIds.has(task.id)) fail(`${p}.id 重复`); taskIds.add(task.id);
-      if (!Object.hasOwn(scenarios, task.scenario)) fail(`${p}.scenario 应为 coding、research 或 data`);
+      if (typeof task.scenario !== 'string' || !Object.hasOwn(scenarios, task.scenario)) fail(`${p}.scenario 应为 coding、research 或 data 字符串`);
       if (!Array.isArray(task.goals) || !task.goals.length || task.goals.length > 20) fail(`${p}.goals 需要包含 1—20 项`);
       const goalIds = new Set();
       task.goals.forEach((goal, gi) => {

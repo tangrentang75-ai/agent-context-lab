@@ -37,3 +37,10 @@ test('all-pass and tied token records remain equally eligible',()=>{
   const task=fresh().tasks[0];task.runs[2].tokens=task.runs[1].tokens;
   assert.deepEqual(E.compare(task,20000,task.runs[0].comparisonGroup).bestIds,['code-b','code-c']);
 });
+
+test('scenario must be a string so imported tasks remain selectable by the matching filter',()=>{
+  for(const scenario of Object.keys(E.scenarios)){
+    const data=fresh();data.tasks[0].scenario=scenario;assert.equal(E.validateDataset(data).tasks.filter(t=>t.scenario===scenario).includes(data.tasks[0]),true);
+    data.tasks[0].scenario=[scenario];assert.throws(()=>E.validateDataset(JSON.parse(JSON.stringify(data))),/scenario/);
+  }
+});
