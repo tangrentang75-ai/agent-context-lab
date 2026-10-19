@@ -6,6 +6,11 @@ let selectedGroup = dataset.tasks[0].runs[0].comparisonGroup;
 let budget = 10000;
 let activeRunId = null;
 let localDataset = false;
+// New requests and local edits invalidate older asynchronous work.
+let datasetEpoch = 0;
+let runEpoch = 0;
+function preserveSession() { datasetEpoch++; }
+function closeStaleDetail() { if ($('detail-dialog').open) $('detail-dialog').close(); activeRunId=null; }
 const $ = id => document.getElementById(id);
 const escapeHTML = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const number = value => value === null ? '未知' : value.toLocaleString('zh-CN');
@@ -61,6 +66,7 @@ function renderOverview() {
   $('task-grid').querySelectorAll('[data-task]').forEach(button => button.addEventListener('click', () => { selectTask(button.dataset.task); location.hash = 'compare'; route(); }));
 }
 function selectTask(id) {
+  preserveSession(); closeStaleDetail();
   selectedTaskId = id; selectedGroup = currentTask().runs[0].comparisonGroup;
   budget = Math.max(10000, ...currentTask().runs.map(r => r.tokens ?? 0));
   $('compare-task').value = selectedTaskId; renderCompare();
@@ -77,21 +83,27 @@ function renderCompare() {
   const applyBudget = document.createElement('button');
   applyBudget.className='button full'; applyBudget.textContent='应用预算'; applyBudget.style.marginTop='10px';
   $('budget-input').parentElement.after(applyBudget);
-  const commitBudget = () => {const field=$('budget-input'), n=Number(field.value); if(field.value==='' || !Number.isFinite(n) || n<0 || n>1e9) {toast('请输入 0—1,000,000,000 的预算',true);field.value=budget;return;}budget=n;renderCompare();};
+  const commitBudget = () => {const field=$('budget-input'), n=Number(field.value); if(field.value==='' || !Number.isFinite(n) || n<0 || n>1e9) {toast('请输入 0—1,000,000,000 的预算',true);field.value=budget;return;}preserveSession();budget=n;renderCompare();};
   applyBudget.addEventListener('click',commitBudget);
+  $('budget-input').addEventListener('input',preserveSession);
   $('budget-input').addEventListener('keydown',event=>{if(event.key==='Enter')commitBudget();});
-  $('group-select').addEventListener('change',event=>{selectedGroup=event.target.value;renderCompare();});
-  $('compare-content').querySelectorAll('[data-weight]').forEach(el=>el.addEventListener('change',()=>{task.goals[Number(el.dataset.weight)].weight=Number(el.value);renderOverview();renderCompare();}));
-  $('compare-content').querySelectorAll('[data-required]').forEach(el=>el.addEventListener('change',()=>{task.goals[Number(el.dataset.required)].required=el.checked;renderOverview();renderCompare();}));
+  $('group-select').addEventListener('change',event=>{preserveSession();selectedGroup=event.target.value;renderCompare();});
+  $('compare-content').querySelectorAll('[data-weight]').forEach(el=>el.addEventListener('change',()=>{preserveSession();task.goals[Number(el.dataset.weight)].weight=Number(el.value);renderOverview();renderCompare();}));
+  $('compare-content').querySelectorAll('[data-required]').forEach(el=>el.addEventListener('change',()=>{preserveSession();task.goals[Number(el.dataset.required)].required=el.checked;renderOverview();renderCompare();}));
   $('compare-content').querySelectorAll('[data-run]').forEach(el=>el.addEventListener('click',()=>showDetail(el.dataset.run)));
   $('export-report').addEventListener('click',()=>{showReport({reportVersion:1,generatedAt:new Date().toISOString(),demo:dataset.demo,scope:'离线记录评估；非在线智能体控制；不代表因果关系或真实提升',budgetTokens:budget,comparisonGroup:selectedGroup,task:structuredClone(task),results:rows.map(x=>({runId:x.run.id,...x.evaluation})),lowestTokenEligibleRunIds:bestIds});});
 }
 function showDetail(id) {
+  preserveSession();
   const task = currentTask(), run = task.runs.find(r=>r.id===id); activeRunId=id;
   $('detail-content').innerHTML = `<header class="dialog-header"><div><p class="eyebrow">EXECUTION REVIEW</p><h2>${escapeHTML(run.strategy)}</h2><p>${escapeHTML(task.title)} · ${dataset.demo?'人工构造示例':localDataset?'本机真实执行':'导入记录'}</p></div><button id="close-dialog" class="icon-button" aria-label="关闭详情">×</button></header><div class="detail-grid"><section><h3>执行时间线</h3><p class="muted">过程记录用于复核，不代表模型内部思维。</p><ol class="timeline">${run.events.length?run.events.map(e=>`<li><span class="timeline-dot ${e.type}"></span><div class="event-top"><strong>${escapeHTML(e.label)}</strong><small>${number(e.atSec)} 秒 · ${typeLabel[e.type]}</small></div><p>${escapeHTML(e.detail)}</p></li>`).join(''):'<li>没有提供过程记录。</li>'}</ol></section><section class="evidence-section"><h3>验收证据</h3><p class="muted">可以人工复核并修正；变更在当前页面内存中保留。</p><form id="review-form">${task.goals.map((g,i)=>`<div class="evidence-item"><label for="evidence-${i}">${escapeHTML(g.label)} ${g.required?'<small>必需</small>':''}</label><select aria-label="${escapeHTML(g.label)}的验收状态" name="status-${i}">${['pass','fail','unknown'].map(s=>`<option value="${s}" ${run.checks[g.id].status===s?'selected':''}>${statusLabel[s]}</option>`).join('')}</select><textarea id="evidence-${i}" name="evidence-${i}" maxlength="6000" rows="3" placeholder="填写可追溯的验收依据">${escapeHTML(run.checks[g.id].evidence)}</textarea></div>`).join('')}<button class="button primary full" type="submit">保存本次复核</button></form></section></div>`;
   $('close-dialog').addEventListener('click',()=>$('detail-dialog').close());
+  $('review-form').addEventListener('input',preserveSession);
+  $('review-form').addEventListener('change',preserveSession);
   $('review-form').addEventListener('submit',event=>{
-    event.preventDefault(); const form = new FormData(event.target), updates=Object.create(null);
+    event.preventDefault();
+    if(currentTask()!==task || !task.runs.includes(run)){toast('记录已切换，请重新打开当前记录复核',true);return;}
+    preserveSession(); const form = new FormData(event.target), updates=Object.create(null);
     for(let i=0;i<task.goals.length;i++) {const status=form.get(`status-${i}`), evidence=form.get(`evidence-${i}`).trim();if(status!=='unknown'&&!evidence){toast('判定通过或未通过时，请补充验收证据',true);return;}updates[task.goals[i].id]={status,evidence};}
     run.checks=updates;renderOverview();renderCompare();$('detail-dialog').close();toast('复核已保存到当前会话；可导出评估报告留存');
   });
@@ -111,25 +123,35 @@ function route() {
   document.body.dataset.view=view;
   $('breadcrumb').textContent=copy[0];$('page-title').textContent=copy[1];$('page-subtitle').textContent=copy[2];
 }
-$('search').addEventListener('input',renderOverview);$('scenario-filter').addEventListener('change',renderOverview);
+$('search').addEventListener('input',()=>{preserveSession();renderOverview();});$('scenario-filter').addEventListener('change',()=>{preserveSession();renderOverview();});
 $('compare-task').addEventListener('change',e=>selectTask(e.target.value));
 $('import-button').addEventListener('click',()=>$('file-input').click());
 $('file-input').addEventListener('change',async event=>{
   const file=event.target.files[0];if(!file)return;
-  try {if(file.size>2*1024*1024)throw new Error('文件不能超过 2 MB');const next=E.validateDataset(JSON.parse(await file.text()));dataset=next;localDataset=false;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;budget=10000;$('search').value='';$('scenario-filter').value='all';renderAll();toast(`已导入 ${dataset.tasks.length} 个任务，原有会话记录已替换`);} catch(error){toast(`导入失败：${error.message}`,true);} finally{event.target.value='';}
+  const epoch=++datasetEpoch;event.target.value='';
+  try {if(file.size>2*1024*1024)throw new Error('文件不能超过 2 MB');const text=await file.text();if(epoch!==datasetEpoch)return;const next=E.validateDataset(JSON.parse(text));closeStaleDetail();dataset=next;localDataset=false;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;budget=10000;$('search').value='';$('scenario-filter').value='all';renderAll();toast(`已导入 ${dataset.tasks.length} 个任务，原有会话记录已替换`);} catch(error){if(epoch===datasetEpoch)toast(`导入失败：${error.message}`,true);}
 });
 $('template-button').addEventListener('click',()=>{download('agent-context-example.json',AGENT_SAMPLE);toast('已下载示例 JSON，可按相同结构替换为自己的记录');});
-$('reset-button').addEventListener('click',()=>{if(!confirm('恢复内置示例会清除本页导入记录和复核修改。需要保留的数据请先导出报告。确认恢复？'))return;dataset=structuredClone(AGENT_SAMPLE);localDataset=false;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;budget=10000;$('search').value='';$('scenario-filter').value='all';renderAll();toast('已恢复内置演示数据');});
+$('reset-button').addEventListener('click',()=>{if(!confirm('恢复内置示例会清除本页导入记录和复核修改。需要保留的数据请先导出报告。确认恢复？'))return;preserveSession();closeStaleDetail();dataset=structuredClone(AGENT_SAMPLE);localDataset=false;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;budget=10000;$('search').value='';$('scenario-filter').value='all';renderAll();toast('已恢复内置演示数据');});
 document.querySelectorAll('.sidebar a[href^="#"], .inline-link[href^="#"]').forEach(link=>link.addEventListener('click',()=>window.scrollTo({top:0,left:0,behavior:'instant'})));
 window.addEventListener('hashchange',route);renderAll();
 
 function showLive(data) {
-  dataset=E.validateDataset(data);localDataset=true;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;
+  const next=E.validateDataset(data);closeStaleDetail();dataset=next;localDataset=true;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;
   budget=Math.max(10000,...dataset.tasks[0].runs.map(r=>r.tokens||0));
   $('search').value='';$('scenario-filter').value='all';location.hash='compare';renderAll();
   const r=dataset.tasks[0].runs[0],u=r.usage;
   $('connection-status').textContent=`最近测试：${r.durationSec} 秒，${number(r.tokens)} tokens${u?`（输入 ${number(u.input_tokens)}，输出 ${number(u.output_tokens)}，输入中缓存 ${number(u.cached_input_tokens??null)}）`:''}。`;
   if(dataset.source==='local-codex-study')$('connection-status').textContent=`已载入 ${dataset.tasks[0].runs.length} 次对照运行；汇总与逐次证据见下方。`;
+}
+async function loadRecords(url,onLoaded=()=>{}) {
+  const epoch=++datasetEpoch;
+  try {
+    const response=await fetch(url),data=await response.json();
+    if(epoch!==datasetEpoch)return;
+    if(!response.ok)throw new Error(data.error||'读取失败');
+    showLive(data);onLoaded(data);
+  } catch(error) { if(epoch===datasetEpoch)toast(error.message||'请启动本机服务后查看',true); }
 }
 function renderStudy() {
   const panel=$('study-results');panel.hidden=!(localDataset&&['local-codex-study','local-retrieval-study','local-evidence-study','local-validation-study','local-scaling-study','local-quality-study'].includes(dataset.source));if(panel.hidden)return;
@@ -141,14 +163,14 @@ function renderStudy() {
   panel.innerHTML=`<p class="eyebrow">真实对照 / ${escapeHTML(study.protocol.requestedModel)} · ${escapeHTML(study.protocol.reasoningEffort)}</p><h2>上下文对照结果</h2><p>${study.status==='complete'?'9 次预定运行已完成':study.status==='running'?'实验正在进行，可再次点击查看以更新':'实验提前停止'} · ${escapeHTML(study.protocol.cliVersion)}${study.stopReason?' · '+escapeHTML(study.stopReason):''}</p><div class="study-table-wrap"><table class="study-table"><thead><tr><th>输入配置</th><th>验收合格 / 尝试</th><th>平均总 token</th><th>token 范围</th><th>平均秒数</th><th>平均缓存输入</th></tr></thead><tbody>${study.summary.map(s=>`<tr><td>${escapeHTML(s.label)}</td><td>${s.successes} / ${s.attempts}</td><td>${fmt(s.tokens.mean)}</td><td>${fmt(s.tokens.min)}—${fmt(s.tokens.max)}</td><td>${fmt(s.durationSec.mean)}</td><td>${fmt(s.cachedInputTokens.mean)}</td></tr>`).join('')}</tbody></table></div><p class="muted">汇总基于原始自动验收；人工复核仅影响下方记录。均值覆盖所有已知成本的尝试，包含失败。未知成本 ${study.summary.reduce((n,s)=>n+s.unknownCost,0)} 条；执行失败 ${study.summary.reduce((n,s)=>n+s.executionFailures,0)} 条；出现额外工具操作 ${study.summary.reduce((n,s)=>n+s.protocolDeviations,0)} 条（已分到独立条件组）。缓存输入包含在总输入内，不重复相加。</p><p><strong>研究边界：</strong>只有一道受限选择题；模型名和推理强度固定，但不是不可变模型快照。额外资料长度不完全相同，缓存与网络也未完全控制。结果不能证明通用节省算力，也不能证明额外探索没有价值。</p><button id="study-report" class="button">导出完整对照记录</button>`;
   $('study-report').addEventListener('click',()=>showReport(dataset));
 }
-$('load-study').addEventListener('click',async()=>{try{const r=await fetch('/api/study');const data=await r.json();if(!r.ok)throw new Error(data.error);showLive(data);$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){toast(e.message||'请启动本机服务后查看',true);}});
+$('load-study').addEventListener('click',()=>loadRecords('/api/study',data=>{$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}));
 function renderRetrieval(panel){
   const s=dataset.retrievalStudy,fmt=v=>v===null?'未知':Number(v).toLocaleString('zh-CN',{maximumFractionDigits:1});
   panel.innerHTML=`<p class="eyebrow">真实调用 · 平台选择资料</p><h2>检索与停止实验</h2><p>${s.status==='complete'?'9 次预定调用已完成':s.status==='running'?'实验进行中，点击查看可刷新':'实验提前停止'} · ${escapeHTML(s.protocol.model)} / ${escapeHTML(s.protocol.effort)}</p><div class="study-table-wrap"><table class="study-table"><thead><tr><th>读取策略</th><th>任务合格 / 尝试</th><th>平均资料数</th><th>平均总 token</th><th>平均秒数</th></tr></thead><tbody>${s.summary.map(row=>`<tr><td>${escapeHTML(row.label)}</td><td>${row.successes} / ${row.attempts}</td><td>${fmt(row.meanFiles)}</td><td>${fmt(row.meanTokens)}</td><td>${fmt(row.meanSeconds)}</td></tr>`).join('')}</tbody></table></div><h3>逐任务结果</h3><div class="study-table-wrap"><table class="study-table"><thead><tr><th>任务</th>${s.summary.map(p=>`<th>${escapeHTML(p.label)}</th>`).join('')}</tr></thead><tbody>${dataset.tasks.map(t=>`<tr><td><button class="text-button" data-retrieval-task="${escapeHTML(t.id)}">${escapeHTML(t.title)}</button></td>${s.summary.map(p=>{const r=t.runs.find(r=>r.policy===p.id);return `<td>${!r?'尚未运行':({passed:'合格',insufficient_evidence:'证据不足',verification_failed:'验收未通过',execution_failed:'执行失败'}[r.outcome]||'未知')}</td>`;}).join('')}</tr>`).join('')}</tbody></table></div><p class="muted">汇总采用原始验收；下方允许人工复核。未知成本 ${s.summary.reduce((n,x)=>n+x.unknownCosts,0)} 条，执行失败 ${s.summary.reduce((n,x)=>n+x.executionFailures,0)} 条，额外模型工具事件涉及 ${s.summary.reduce((n,x)=>n+x.protocolDeviations,0)} 次运行。均值包含失败的已知成本。平台规则未额外调用模型，读取与选择的本机耗时已计入总时长。</p><p><strong>研究边界：</strong>资料由平台按手工标签选择，模型负责从所选正文恢复配置。标签覆盖不代表证据充分。只有 3 个人工任务，每任务每策略 1 次；验收核对配置与引用，不是完整代码测试，不能证明自主探索或通用算力优化。</p><button id="retrieval-export" class="button">导出检索实验完整记录</button>`;
   panel.querySelectorAll('[data-retrieval-task]').forEach(button=>button.addEventListener('click',()=>{selectTask(button.dataset.retrievalTask);$('compare-content').scrollIntoView({behavior:'smooth',block:'start'});}));
   $('retrieval-export').addEventListener('click',()=>showReport(dataset));
 }
-$('load-retrieval').addEventListener('click',async()=>{try{const r=await fetch('/api/retrieval');const data=await r.json();if(!r.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent=`已载入 ${data.tasks.length} 个任务、${data.tasks.reduce((n,t)=>n+t.runs.length,0)} 次检索实验记录。`;$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}catch(e){toast(e.message||'请启动本机服务后查看',true);}});
+$('load-retrieval').addEventListener('click',()=>loadRecords('/api/retrieval',data=>{$('connection-status').textContent=`已载入 ${data.tasks.length} 个任务、${data.tasks.reduce((n,t)=>n+t.runs.length,0)} 次检索实验记录。`;$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}));
 function renderEvidence(panel) {
   const study=dataset.retrievalStudy,fmt=v=>v==null?'未知':Number(v).toLocaleString('zh-CN',{maximumFractionDigits:1});
   const runs=dataset.tasks.flatMap(t=>t.runs),total=study.protocol.schedule.length;
@@ -166,14 +188,8 @@ function renderEvidence(panel) {
   panel.querySelectorAll('[data-evidence-task]').forEach(button=>button.addEventListener('click',()=>{selectTask(button.dataset.evidenceTask);$('compare-content').scrollIntoView({behavior:'smooth',block:'start'});}));
   $('evidence-export').addEventListener('click',()=>showReport(dataset));
 }
-$('load-evidence').addEventListener('click',async()=>{
-  try{const response=await fetch('/api/evidence'),data=await response.json();if(!response.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent=`已载入 ${data.tasks.length} 个任务的证据补读实验；调用与成本见下表。`;$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}
-  catch(e){toast(e.message||'请启动本机服务后查看',true);}
-});
-$('load-validation').addEventListener('click',async()=>{
-  try{const response=await fetch('/api/validation'),data=await response.json();if(!response.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent='已载入新编任务的检查结果；来源编号使用预先约束的格式。';$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}
-  catch(e){toast(e.message||'请启动本机服务后查看',true);}
-});
+$('load-evidence').addEventListener('click',()=>loadRecords('/api/evidence',data=>{$('connection-status').textContent=`已载入 ${data.tasks.length} 个任务的证据补读实验；调用与成本见下表。`;$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}));
+$('load-validation').addEventListener('click',()=>loadRecords('/api/validation',data=>{$('connection-status').textContent='已载入新编任务的检查结果；来源编号使用预先约束的格式。';$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}));
 function renderQuality(panel){
   const names={correct_answer:'正确恢复配置',correct_abstention:'按约定留空（未恢复配置）',unnecessary_abstention:'可回答却留空',unsupported_assertion:'应留空但未遵守约定',incorrect_answer:'答案或引用不正确',unassessed:'尚未判定'};
   const studies=dataset.retrievalStudy,checks=dataset.tasks.flatMap(t=>t.runs.flatMap(r=>Object.values(r.checks)));
@@ -189,10 +205,7 @@ function renderQuality(panel){
   }).join('');
   panel.insertAdjacentHTML('afterbegin',`<section aria-label="安全响应审计"><h2>能回答时准确回答，依据不足时留空</h2><p>${escapeHTML(studies.protocol.verificationContract)}</p><p>字段级原始验收：正确恢复 ${count('correct_answer')} 项；按约定留空 ${count('correct_abstention')} 项；应留空但未遵守约定 ${count('unsupported_assertion')} 项；可回答却留空 ${count('unnecessary_abstention')} 项；答案或引用不正确 ${count('incorrect_answer')} 项；尚未判定 ${checks.filter(c=>c.status==='unknown').length} 项。</p><div class="study-table-wrap"><table class="study-table"><thead><tr><th>反例</th><th>完整资料要求</th><th>策略</th><th>实际响应判定</th><th>停止审计</th><th>总用量</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted">误停指引文检查通过后停止，但最终响应未达到本题约定。完整资料金标准只在停止后使用；控制器尚未具备通用语义相关性或冲突检测能力。每格一次的开发反例不代表真实错误率。</p></section>`);
 }
-$('load-quality').addEventListener('click',async()=>{
-  try{const response=await fetch('/api/quality'),data=await response.json();if(!response.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent='已载入质量反例；正确留空只表示响应符合约定，不表示配置恢复完成。';$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}
-  catch(e){toast(e.message||'请启动本机服务后查看',true);}
-});
+$('load-quality').addEventListener('click',()=>loadRecords('/api/quality',data=>{$('connection-status').textContent='已载入质量反例；正确留空只表示响应符合约定，不表示配置恢复完成。';$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}));
 function renderScaling(panel){
   const fmt=v=>v==null?'未知':Number(v).toLocaleString('zh-CN',{maximumFractionDigits:1});
   const label={passed:'合格',insufficient_evidence:'证据不足',verification_failed:'未通过',execution_failed:'执行失败',budget_stopped:'阈值停止'};
@@ -205,23 +218,23 @@ function renderScaling(panel){
   }).join('');
   panel.insertAdjacentHTML('afterbegin',`<section aria-label="按实验条件比较"><h2>同一任务，分条件比较</h2><p>每份正文的长度固定，六份资料；同长度下正文相同，仅改变标签。差值为全读总 token 减去补读策略总 token，仅在两者验收通过、用量已知且无额外工具事件时显示。</p><div class="study-table-wrap"><table class="study-table"><thead><tr><th>资料长度</th><th>目录状态</th><th>一次全读</th><th>按需补读</th><th>按需补读的 token 差值</th></tr></thead><tbody>${rows}</tbody></table></div><p class="muted">人工背景填充、同一道题、每格一次；不估计自然遗漏概率，不支持泛化结论。下方跨条件均值仅描述本次设计，不代表实际工作负载。</p></section>`);
 }
-$('load-scaling').addEventListener('click',async()=>{
-  try{const response=await fetch('/api/scaling'),data=await response.json();if(!response.ok)throw new Error(data.error);showLive(data);$('connection-status').textContent='已载入长度与标签对照；请按条件分别查看，勿将设置比例当作自然概率。';$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}
-  catch(e){toast(e.message||'请启动本机服务后查看',true);}
-});
+$('load-scaling').addEventListener('click',()=>loadRecords('/api/scaling',data=>{$('connection-status').textContent='已载入长度与标签对照；请按条件分别查看，勿将设置比例当作自然概率。';$('study-results').scrollIntoView({behavior:'smooth',block:'start'});}));
 async function checkConnection() {
-  try {const response=await fetch('/api/status');if(!response.ok)throw new Error();const state=await response.json();$('connection-status').textContent=state.running?'真实任务正在运行，可稍后查看最近结果':state.message;$('run-live').disabled=!state.available||state.running;$('load-live').disabled=!state.hasLatest;}
-  catch {$('connection-status').textContent='真实执行需要本机服务：运行 npm start 后打开 http://127.0.0.1:4173。';}
+  const epoch=datasetEpoch,runAtStart=runEpoch;
+  try {const response=await fetch('/api/status');if(!response.ok)throw new Error();const state=await response.json();if(runAtStart!==runEpoch)return;if(epoch===datasetEpoch)$('connection-status').textContent=state.running?'真实任务正在运行，可稍后查看最近结果':state.message;$('run-live').disabled=!state.available||state.running;if(epoch===datasetEpoch||state.hasLatest)$('load-live').disabled=!state.hasLatest;}
+  catch {if(epoch!==datasetEpoch)return;$('connection-status').textContent='真实执行需要本机服务：运行 npm start 后打开 http://127.0.0.1:4173。';}
 }
 $('run-live').addEventListener('click',async()=>{
+  runEpoch++;
+  const epoch=++datasetEpoch;
   $('run-live').disabled=true;$('load-live').disabled=true;const started=Date.now();
-  const progress=setInterval(()=>{$('connection-status').textContent=`Codex 正在执行真实任务… ${Math.floor((Date.now()-started)/1000)} 秒`;},1000);
+  const progress=setInterval(()=>{if(epoch!==datasetEpoch)return;$('connection-status').textContent=`Codex 正在执行真实任务… ${Math.floor((Date.now()-started)/1000)} 秒`;},1000);
   $('connection-status').textContent='正在提交真实任务…';
-  try {const response=await fetch('/api/run',{method:'POST',headers:{'X-Agent-Context':'local-run'}});const data=await response.json();if(!response.ok)throw new Error(data.error||'运行失败');clearInterval(progress);showLive(data);$('load-live').disabled=false;toast('真实运行完成，已显示独立验收结果');}
-  catch(e){$('connection-status').textContent=e.message;toast(e.message,true);}
+  try {const response=await fetch('/api/run',{method:'POST',headers:{'X-Agent-Context':'local-run'}});const data=await response.json();if(epoch!==datasetEpoch)return;if(!response.ok)throw new Error(data.error||'运行失败');clearInterval(progress);showLive(data);$('load-live').disabled=false;toast('真实运行完成，已显示独立验收结果');}
+  catch(e){if(epoch===datasetEpoch){$('connection-status').textContent=e.message;toast(e.message,true);}}
   finally{clearInterval(progress);$('run-live').disabled=false;$('load-live').disabled=false;}
 });
-$('load-live').addEventListener('click',async()=>{try{const response=await fetch('/api/latest');const data=await response.json();if(!response.ok)throw new Error(data.error);showLive(data);}catch(e){toast(e.message,true);}});
+$('load-live').addEventListener('click',()=>loadRecords('/api/latest'));
 checkConnection();
 
 
