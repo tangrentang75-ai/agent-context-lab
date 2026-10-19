@@ -40,6 +40,7 @@ dialog{border-radius:12px;box-shadow:0 20px 80px #1d1d3528;padding:26px}dialog::
 @media(max-width:480px){.task-grid,.experiment-grid{grid-template-columns:1fr}.task-card{padding:20px 18px 0}.task-card h3{font-size:15px}.task-card>p{font-size:12px;min-height:0}.card-meta{font-size:10px}.card-action{font-size:11px}.stat>div{font-size:11px}.stat>strong{font-size:25px}.stat{padding:14px}.next-icon{display:none}.sidebar nav svg{display:none}.sidebar nav a{padding:9px 8px}.sidebar nav a span{font-size:11px}.page-heading .eyebrow{font-size:8px}.outcome-total>span{font-size:10px}.outcome-legend{gap:12px;font-size:10px}.notice span:not(.notice-icon):not(.tag){display:inline}.goal-row{gap:8px}.goal-label{min-width:65%}.page-footer{font-size:9px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
 body[data-view=experiments] #notice,body[data-view=research] #notice,body[data-view=experiments] .header-actions,body[data-view=research] .header-actions{display:none}.notice a{color:#6e62ad;text-decoration:underline;text-underline-offset:2px;margin:0 3px}
+.header-actions{flex-wrap:wrap;max-width:100%}
 .review-page button{color:#fff}.review-page button.secondary{color:#696179}
 
 .review-page select{display:block;width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;min-width:0}.review-page blockquote{white-space:pre-wrap}

@@ -17,8 +17,8 @@ const number = value => value === null ? '未知' : value.toLocaleString('zh-CN'
 const statusLabel = { pass:'已通过', fail:'未通过', unknown:'待核验' };
 const typeLabel = { explore:'探索', act:'执行', verify:'验证' };
 function toast(message, error = false) { $('toast').textContent = message; $('toast').className = `toast${error ? ' error' : ''}`; $('toast').hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => { $('toast').hidden = true; }, 5500); }
-function download(name, payload) {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+function download(name, payload, compact = false) {
+  const blob = new Blob([JSON.stringify(payload, null, compact ? undefined : 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob); const link = document.createElement('a');
   link.href = url; link.download = name; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -37,7 +37,7 @@ function notice() {
   $('notice').innerHTML = dataset.demo
     ? '<span class="notice-icon">i</span><div><strong>当前为人工构造的演示数据</strong><span>用于体验评估流程；真实记录可在<a href="#experiments">实验中心</a>查看。</span></div><span class="tag">DEMO</span>'
     : localDataset ? '<span class="notice-icon">✓</span><div><strong>当前显示本机 Codex 真实执行记录</strong><span>逐项独立验收；用量来自执行器。原始结果保存在本机，人工复核修改需导出留存。少量任务不代表普遍提升。</span></div><span class="tag">LIVE</span>'
-    : '<span class="notice-icon">i</span><div><strong>当前为你导入的记录</strong><span>数据仅在当前页面内存中处理；来源与验收证据需自行复核。刷新会恢复示例，请导出保存。</span></div><span class="tag">IMPORTED</span>';
+    : '<span class="notice-icon">i</span><div><strong>当前为你导入的记录</strong><span>数据仅在当前页面内存中处理；来源与验收证据需自行复核。刷新会恢复示例，请先点“保存当前数据”。</span></div><span class="tag">IMPORTED</span>';
   if(dataset.source==='local-quality-study')$('notice').insertAdjacentHTML('beforeend','<p><strong>本组按安全响应约定验收：</strong>冲突或缺失资料时，正确留空可以通过；通过不表示配置已经恢复。与旧实验的配置完成率分开理解。</p>');
 }
 function renderOverview() {
@@ -105,7 +105,7 @@ function showDetail(id) {
     if(currentTask()!==task || !task.runs.includes(run)){toast('记录已切换，请重新打开当前记录复核',true);return;}
     preserveSession(); const form = new FormData(event.target), updates=Object.create(null);
     for(let i=0;i<task.goals.length;i++) {const status=form.get(`status-${i}`), evidence=form.get(`evidence-${i}`).trim();if(status!=='unknown'&&!evidence){toast('判定通过或未通过时，请补充验收证据',true);return;}updates[task.goals[i].id]={status,evidence};}
-    run.checks=updates;renderOverview();renderCompare();$('detail-dialog').close();toast('复核已保存到当前会话；可导出评估报告留存');
+    run.checks=updates;renderOverview();renderCompare();$('detail-dialog').close();toast('复核已更新到当前会话；请点“保存当前数据”下载留存，下次可重新导入');
   });
   $('detail-dialog').showModal();
 }
@@ -132,6 +132,14 @@ $('file-input').addEventListener('change',async event=>{
   try {if(file.size>2*1024*1024)throw new Error('文件不能超过 2 MB');const text=await file.text();if(epoch!==datasetEpoch)return;const next=E.validateDataset(JSON.parse(text));closeStaleDetail();dataset=next;localDataset=false;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;budget=10000;$('search').value='';$('scenario-filter').value='all';renderAll();toast(`已导入 ${dataset.tasks.length} 个任务，原有会话记录已替换`);} catch(error){if(epoch===datasetEpoch)toast(`导入失败：${error.message}`,true);}
 });
 $('template-button').addEventListener('click',()=>{download('agent-context-example.json',AGENT_SAMPLE);toast('已下载示例 JSON，可按相同结构替换为自己的记录');});
+$('save-dataset').addEventListener('click',()=>{
+  try {
+    const snapshot=E.validateDataset(structuredClone(dataset));
+    if(new Blob([JSON.stringify(snapshot)]).size>2*1024*1024)throw new Error('当前数据超过 2 MB，无法生成可重新导入的整份文件；请在策略比较中按任务导出评估报告留存');
+    preserveSession();download('agent-context-dataset.json',snapshot,true);
+    toast('已发起整份数据下载，请确认文件已保存；下次用“导入记录”继续。预算与筛选不包含在文件中');
+  } catch(error) { toast(`未能保存：${error.message}`,true); }
+});
 $('reset-button').addEventListener('click',()=>{if(!confirm('恢复内置示例会清除本页导入记录和复核修改。需要保留的数据请先导出报告。确认恢复？'))return;preserveSession();closeStaleDetail();dataset=structuredClone(AGENT_SAMPLE);localDataset=false;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;budget=10000;$('search').value='';$('scenario-filter').value='all';renderAll();toast('已恢复内置演示数据');});
 document.querySelectorAll('.sidebar a[href^="#"], .inline-link[href^="#"]').forEach(link=>link.addEventListener('click',()=>window.scrollTo({top:0,left:0,behavior:'instant'})));
 window.addEventListener('hashchange',route);renderAll();

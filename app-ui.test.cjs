@@ -5,7 +5,7 @@ const fresh=title=>{const data=structuredClone(globalThis.AGENT_SAMPLE);data.tas
 function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
 // Minimal DOM event doubles run the real app handlers; no browser or model calls.
 function harness(){
-  const nodes=new Map(),requests=[],intervals=[];
+  const nodes=new Map(),requests=[],intervals=[],downloads=[];
   class Element{
     constructor(){this.listeners={};this.value='';this.dataset={};this.style={};this.parentElement={after(){}};this.open=false;this._html='';this.textContent='';}
     addEventListener(type,fn){(this.listeners[type]??=[]).push(fn);}async emit(type,event={target:this}){for(const fn of this.listeners[type]||[])await fn(event);}
@@ -21,7 +21,7 @@ function harness(){
   }
   const get=id=>{if(!nodes.has(id))nodes.set(id,new Element());return nodes.get(id);};
   get('scenario-filter').value='all';get('run-live').disabled=true;get('load-live').disabled=true;
-  const context={AgentEvaluation:E,AGENT_SAMPLE:globalThis.AGENT_SAMPLE,structuredClone,Blob,URL,console,
+  const context={AgentEvaluation:E,AGENT_SAMPLE:globalThis.AGENT_SAMPLE,structuredClone,Blob,URL:{createObjectURL:blob=>{downloads.push(blob);return 'blob:test';},revokeObjectURL(){}},console,
     document:{getElementById:get,createElement:()=>new Element(),querySelectorAll:()=>[],body:{dataset:{},append(){}}},
     window:{addEventListener(){},scrollTo(){}},location:{hash:''},confirm:()=>true,
     FormData:class{constructor(target){this.fields=target.fields;}get(key){return this.fields[key];}},
@@ -29,7 +29,7 @@ function harness(){
     fetch:(url,options)=>{const d=deferred();requests.push({url,options,...d});return d.promise;}};
   vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('./app.js'),'utf8'),context);
   const read=expr=>vm.runInContext(expr,context);
-  return {get,requests,intervals,read,
+  return {get,requests,intervals,downloads,read,
     import(file){get('file-input').files=[file];get('file-input').value='selected';return get('file-input').emit('change');},
     respond(index,data,ok=true){requests[index].resolve({ok,json:async()=>data});},
     control(name){return get('compare-content').querySelectorAll(`[data-${name}]`)[0];}};
@@ -104,4 +104,25 @@ test('运行接口仅用模拟响应：切换记录后进度、成功和错误�
     await pending;assert.equal(h.read('dataset.tasks[0].title'),'保留手动选择');assert.equal(h.get('toast').textContent,message);assert.equal(h.get('run-live').disabled,false);
   }
   const h=harness(),pending=h.get('run-live').click();h.respond(1,fresh('当前模拟运行'));await pending;assert.equal(h.read('dataset.tasks[0].title'),'当前模拟运行');
+});
+test('保存当前数据可完整重新导入，保留多任务修改、未知费用、演示标记及原始附加字段',async()=>{
+  const data=fresh('虚构整份备份');data.tasks[1].runs[0].tokens=null;data.source='declared-source';data.originalSummary={note:'原始汇总不随人工修改重算'};
+  const h=harness();await h.import(file(data));const weight=h.control('weight');weight.value='2';await weight.emit('change');
+  await h.control('run').click();const form=h.get('review-form'),fields={};h.read('currentTask().goals').forEach((g,i)=>{fields[`status-${i}`]='unknown';fields[`evidence-${i}`]='虚构保存测试';});form.fields=fields;await form.emit('submit',{target:form,preventDefault(){}});
+  const snapshot=h.read('JSON.stringify(dataset)');await h.get('save-dataset').click();assert.equal(h.downloads.length,1);
+  const saved=await h.downloads[0].text();assert.equal(saved,snapshot);E.validateDataset(JSON.parse(saved));
+  const restored=harness();await restored.import({size:h.downloads[0].size,text:async()=>saved});assert.equal(restored.read('JSON.stringify(dataset)'),snapshot);
+  assert.equal(restored.read('localDataset'),false);assert.equal(restored.read('dataset.demo'),true);assert.equal(restored.read('dataset.tasks[1].runs[0].tokens'),null);
+  assert.match(h.get('toast').textContent,/确认文件/);
+});
+test('整份保存按UTF-8字节限制2MiB，边界文件可回读，超限不截断、不修改当前数据',async()=>{
+  const h=harness(),data=fresh('边界测试');data.padding='中'.repeat(100);let text=JSON.stringify(data);data.padding+='x'.repeat(2*1024*1024-Buffer.byteLength(text));text=JSON.stringify(data);
+  assert.equal(Buffer.byteLength(text),2*1024*1024);await h.import({size:Buffer.byteLength(text),text:async()=>text});await h.get('save-dataset').click();assert.equal(h.downloads.length,1);assert.equal(h.downloads[0].size,2*1024*1024);
+  const restored=harness();await restored.import({size:h.downloads[0].size,text:()=>h.downloads[0].text()});assert.equal(restored.read('dataset.tasks[0].title'),'边界测试');
+  const newData=structuredClone(data);newData.padding+='中';const load=h.get('load-live').click();h.respond(1,newData);await load;const before=h.read('JSON.stringify(dataset)');
+  await h.get('save-dataset').click();assert.equal(h.downloads.length,1);assert.match(h.get('toast').textContent,/超过 2 MB/);assert.equal(h.read('JSON.stringify(dataset)'),before);
+});
+test('保存快照阻止在途读取切走已保存页面；保存失败不会提示下载成功',async()=>{
+  const h=harness(),slow=deferred(),pending=h.import(slowFile(slow));const original=h.read('JSON.stringify(dataset)');await h.get('save-dataset').click();slow.resolve(JSON.stringify(fresh('旧文件')));await pending;assert.equal(h.read('JSON.stringify(dataset)'),original);
+  const g=harness();g.read("URL.createObjectURL=()=>{throw Error('下载资源不可用')}");await g.get('save-dataset').click();assert.match(g.get('toast').textContent,/未能保存.*下载资源不可用/);assert.equal(g.downloads.length,0);
 });
