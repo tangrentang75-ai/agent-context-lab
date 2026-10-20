@@ -7,9 +7,9 @@ function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve
 function harness(){
   const nodes=new Map(),requests=[],intervals=[],downloads=[];
   class Element{
-    constructor(){this.listeners={};this.value='';this.dataset={};this.style={};this.parentElement={after(){}};this.open=false;this._html='';this.textContent='';}
+    constructor(){this.listeners={};this.value='';this.dataset={};this.style={};this.parentElement={after(){}};this.open=false;this._html='';this.textContent='';this.children=[];}
     addEventListener(type,fn){(this.listeners[type]??=[]).push(fn);}async emit(type,event={target:this}){for(const fn of this.listeners[type]||[])await fn(event);}
-    click(){return this.emit('click');}showModal(){this.open=true;}close(){this.open=false;}scrollIntoView(){}append(){}remove(){}
+    click(){return this.emit('click');}showModal(){this.open=true;}close(){this.open=false;}scrollIntoView(){}append(...nodes){this.children.push(...nodes);}remove(){}
     set innerHTML(v){this._html=v;this.controls=new Map();for(const m of v.matchAll(/\bid="([^"]+)"/g))nodes.set(m[1],new Element());}
     get innerHTML(){return this._html;}
     insertAdjacentHTML(position,value){this._html=position==='afterbegin'?value+this._html:this._html+value;}
@@ -38,6 +38,30 @@ function harness(){
 const file=data=>({size:100,text:async()=>JSON.stringify(data)});
 const slowFile=d=>({size:100,text:()=>d.promise});
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('条件组切换保留原始空白与符号，页面和报告只包含所选组',async()=>{
+  const h=harness(),data=fresh('虚构分组回归');
+  const groups=['条件 A','条件  A',' 条件 A ','条件\r\nB\t<对照> & "引用"','条件\nB','条件\rB','条件\0B'];
+  const task=data.tasks[0],base=task.runs[0];
+  task.runs=groups.map((group,i)=>({...structuredClone(base),id:`group-${i}`,strategy:`分组记录${i}`,comparisonGroup:group}));
+  await h.import(file(data));
+  for(const i of [1,3,0,6,2,5,4,1]){
+    const select=h.get('group-select');
+    assert.deepEqual(select.children.map(o=>o.value),groups);
+    select.value=select.children[i].value;await select.emit('change');
+    assert.equal(h.read('selectedGroup'),groups[i]);assert.equal(h.get('group-select').value,groups[i]);
+    const buttons=h.get('compare-content').querySelectorAll('[data-run]');
+    assert.deepEqual(buttons.map(b=>b.dataset.run),[`group-${i}`]);
+    await h.get('export-report').click();
+    const report=JSON.parse(await h.downloads.at(-1).text());
+    assert.equal(report.comparisonGroup,groups[i]);assert.deepEqual(report.results.map(r=>r.runId),[`group-${i}`]);
+    await h.get('close-report').click();
+    const weight=h.control('weight');weight.value='2';await weight.emit('change');
+    assert.equal(h.get('group-select').value,groups[i]);
+  }
+  await h.get('save-dataset').click();
+  assert.deepEqual(JSON.parse(await h.downloads.at(-1).text()).tasks[0].runs.map(r=>r.comparisonGroup),groups);
+});
 
 test('首页后选文件优先，迟到的成功、解析失败和读取失败不覆盖新结果',async()=>{
   for(const outcome of ['success','parse','read']){
