@@ -129,7 +129,7 @@ $('import-button').addEventListener('click',()=>$('file-input').click());
 $('file-input').addEventListener('change',async event=>{
   const file=event.target.files[0];if(!file)return;
   const epoch=++datasetEpoch;event.target.value='';
-  try {if(file.size>2*1024*1024)throw new Error('文件不能超过 2 MB');const text=await file.text();if(epoch!==datasetEpoch)return;const next=E.validateDataset(JSON.parse(text));closeStaleDetail();dataset=next;localDataset=false;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;budget=10000;$('search').value='';$('scenario-filter').value='all';renderAll();toast(`已导入 ${dataset.tasks.length} 个任务，原有会话记录已替换`);} catch(error){if(epoch===datasetEpoch)toast(`导入失败：${error.message}`,true);}
+  try {if(file.size>2*1024*1024)throw new Error('文件不能超过 2 MB');const text=await file.text();if(epoch!==datasetEpoch)return;replaceDataset(JSON.parse(text),false);toast(`已导入 ${dataset.tasks.length} 个任务，原有会话记录已替换`);} catch(error){if(epoch===datasetEpoch)toast(`导入失败：${error.message}`,true);}
 });
 $('template-button').addEventListener('click',()=>{download('agent-context-example.json',AGENT_SAMPLE);toast('已下载示例 JSON，可按相同结构替换为自己的记录');});
 $('save-dataset').addEventListener('click',()=>{
@@ -144,14 +144,33 @@ $('reset-button').addEventListener('click',()=>{if(!confirm('恢复内置示例�
 document.querySelectorAll('.sidebar a[href^="#"], .inline-link[href^="#"]').forEach(link=>link.addEventListener('click',()=>window.scrollTo({top:0,left:0,behavior:'instant'})));
 window.addEventListener('hashchange',route);renderAll();
 
-function showLive(data) {
-  const next=E.validateDataset(data);closeStaleDetail();dataset=next;localDataset=true;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;
-  budget=Math.max(10000,...dataset.tasks[0].runs.map(r=>r.tokens||0));
-  $('search').value='';$('scenario-filter').value='all';location.hash='compare';renderAll();
-  const r=dataset.tasks[0].runs[0],u=r.usage;
-  $('connection-status').textContent=`最近测试：${r.durationSec} 秒，${number(r.tokens)} tokens${u?`（输入 ${number(u.input_tokens)}，输出 ${number(u.output_tokens)}，输入中缓存 ${number(u.cached_input_tokens??null)}）`:''}。`;
-  if(dataset.source==='local-codex-study')$('connection-status').textContent=`已载入 ${dataset.tasks[0].runs.length} 次对照运行；汇总与逐次证据见下方。`;
+function replaceDataset(data,isLocal) {
+  const next=E.validateDataset(data);
+  const previous={dataset,localDataset,selectedTaskId,selectedGroup,budget,
+    search:$('search').value,filter:$('scenario-filter').value,budgetDraft:$('budget-input').value,
+    hash:location.hash,connection:$('connection-status').textContent};
+  try {
+    dataset=next;localDataset=isLocal;selectedTaskId=next.tasks[0].id;selectedGroup=next.tasks[0].runs[0].comparisonGroup;
+    budget=isLocal?Math.max(10000,...next.tasks[0].runs.map(r=>r.tokens??0)):10000;
+    $('search').value='';$('scenario-filter').value='all';
+    if(isLocal){
+      const r=next.tasks[0].runs[0],u=r.usage;
+      $('connection-status').textContent=`最近测试：${r.durationSec} 秒，${number(r.tokens)} tokens${u?`（输入 ${number(u.input_tokens)}，输出 ${number(u.output_tokens)}，输入中缓存 ${number(u.cached_input_tokens??null)}）`:''}。`;
+      if(next.source==='local-codex-study')$('connection-status').textContent=`已载入 ${next.tasks[0].runs.length} 次对照运行；汇总与逐次证据见下方。`;
+      location.hash='compare';
+    }
+    renderAll();
+  } catch(error) {
+    // Rendering also consumes optional study metadata, beyond the core dataset schema.
+    ({dataset,localDataset,selectedTaskId,selectedGroup,budget}=previous);
+    $('search').value=previous.search;$('scenario-filter').value=previous.filter;
+    location.hash=previous.hash;$('connection-status').textContent=previous.connection;
+    renderAll();$('budget-input').value=previous.budgetDraft;
+    throw new Error('记录无法完整显示，已保留原有数据。请检查实验汇总或用量字段。',{cause:error});
+  }
+  closeStaleDetail();
 }
+function showLive(data) { replaceDataset(data,true); }
 async function loadRecords(url,onLoaded=()=>{}) {
   const epoch=++datasetEpoch;
   try {

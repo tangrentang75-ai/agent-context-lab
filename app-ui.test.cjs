@@ -12,6 +12,7 @@ function harness(){
     click(){return this.emit('click');}showModal(){this.open=true;}close(){this.open=false;}scrollIntoView(){}append(){}remove(){}
     set innerHTML(v){this._html=v;this.controls=new Map();for(const m of v.matchAll(/\bid="([^"]+)"/g))nodes.set(m[1],new Element());}
     get innerHTML(){return this._html;}
+    insertAdjacentHTML(position,value){this._html=position==='afterbegin'?value+this._html:this._html+value;}
     querySelectorAll(selector){
       if(!this.controls)this.controls=new Map();if(this.controls.has(selector))return this.controls.get(selector);
       const match=selector.match(/^\[data-([a-z]+)\]$/);if(!match)return [];
@@ -125,4 +126,24 @@ test('整份保存按UTF-8字节限制2MiB，边界文件可回读，超限不�
 test('保存快照阻止在途读取切走已保存页面；保存失败不会提示下载成功',async()=>{
   const h=harness(),slow=deferred(),pending=h.import(slowFile(slow));const original=h.read('JSON.stringify(dataset)');await h.get('save-dataset').click();slow.resolve(JSON.stringify(fresh('旧文件')));await pending;assert.equal(h.read('JSON.stringify(dataset)'),original);
   const g=harness();g.read("URL.createObjectURL=()=>{throw Error('下载资源不可用')}");await g.get('save-dataset').click();assert.match(g.get('toast').textContent,/未能保存.*下载资源不可用/);assert.equal(g.downloads.length,0);
+});
+test('本机汇总或用量字段损坏时回退完整会话，随后仍能保存和读取有效记录',async()=>{
+  for(const source of ['local-codex-study','local-retrieval-study','local-evidence-study','local-validation-study','local-scaling-study','local-quality-study','bad-usage']){
+    const h=harness();await h.import(file(fresh('原记录')));
+    h.get('compare-task').value=h.read('dataset.tasks[1].id');await h.get('compare-task').emit('change');
+    h.get('search').value='原筛选';await h.get('search').emit('input');h.get('scenario-filter').value='research';await h.get('scenario-filter').emit('change');
+    h.get('budget-input').value='1234';await h.get('budget-input').emit('input');h.read("location.hash='overview'");
+    const previous=h.read('JSON.stringify({dataset,localDataset,selectedTaskId,selectedGroup,budget})'),oldGrid=h.get('task-grid').innerHTML;
+    const bad=fresh('不可显示的新记录');bad.source=source;if(source==='bad-usage')bad.tasks[0].runs[0].usage={};
+    const pending=h.get('load-live').click();h.respond(1,bad);await pending;
+    assert.equal(h.read('JSON.stringify({dataset,localDataset,selectedTaskId,selectedGroup,budget})'),previous,source);
+    assert.equal(h.get('task-grid').innerHTML,oldGrid);assert.equal(h.get('search').value,'原筛选');assert.equal(h.get('scenario-filter').value,'research');assert.equal(h.get('budget-input').value,'1234');assert.equal(h.read('location.hash'),'overview');assert.match(h.get('toast').textContent,/保留原有/);
+    await h.get('save-dataset').click();assert.equal(JSON.parse(await h.downloads[0].text()).tasks[0].title,'原记录');
+    const next=h.get('load-live').click();h.respond(2,fresh('有效新记录'));await next;assert.equal(h.read('dataset.tasks[0].title'),'有效新记录');
+  }
+});
+test('切换显示失败时不关闭旧详情或改动旧任务，原表单仍可提交',async()=>{
+  const h=harness();await h.control('run').click();const form=h.get('review-form');form.fields={};h.read('currentTask().goals').forEach((g,i)=>{form.fields[`status-${i}`]='unknown';form.fields[`evidence-${i}`]='保留的虚构草稿';});
+  const bad=fresh('损坏汇总');bad.source='local-codex-study';const pending=h.get('load-study').click();h.respond(1,bad);await pending;
+  assert.equal(h.get('detail-dialog').open,true);assert.equal(h.get('review-form'),form);await form.emit('submit',{target:form,preventDefault(){}});assert.equal(h.read('currentTask().runs[0].checks[currentTask().goals[0].id].evidence'),'保留的虚构草稿');
 });
