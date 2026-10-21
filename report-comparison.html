@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>报告对照 · 任务罗盘</title>
+  <link rel="stylesheet" href="report-comparison.css">
+  <script defer src="evaluation.js"></script><script defer src="report-comparison.js"></script><script defer src="report-comparison-ui.js"></script>
+</head>
+<body>
+  <a class="skip" href="#content">跳到主要内容</a>
+  <header><a class="brand" href="/">◈ 任务罗盘</a><nav aria-label="工作台导航"><a href="/">任务工作台</a><a href="project-review.html">项目体检</a><a href="report-comparison.html" aria-current="page">报告对照</a></nav><span class="local">● 浏览器内处理</span></header>
+  <main id="content">
+    <section class="intro"><div><p class="eyebrow">报告对照 / REVIEW CHANGES</p><h1>这一次，哪里变了？</h1><p class="subtitle">把两份评估放在一起，先核对条件，再逐项查看证据。</p></div><button id="demo" disabled>用示例体验</button></section>
+    <p id="notice" class="notice" role="status" aria-live="polite">正在准备本机评价规则…</p><button id="retry" hidden>重新连接本机服务</button>
+    <section class="imports" aria-label="选择两份评估报告">
+      <div class="file-card"><span class="step">01 / 对照起点</span><h2>之前的报告</h2><label for="before-file">选择 JSON 报告</label><input id="before-file" type="file" accept=".json,application/json" disabled><p id="before-name" class="file-name">尚未选择</p></div>
+      <div class="file-card"><span class="step">02 / 查看变化</span><h2>之后的报告</h2><label for="after-file">选择 JSON 报告</label><input id="after-file" type="file" accept=".json,application/json" disabled><p id="after-name" class="file-name">尚未选择</p></div>
+    </section>
+    <div class="actions"><button id="compare" class="primary" disabled>查看对照结果</button><button id="reset">清空本页</button><p>每份最大 16MiB。文件不上传、不自动保存；刷新前请下载结果。</p></div>
+    <details class="help"><summary>我应该选择哪种文件？</summary><p>选择离线批量检查生成的完整评估报告（acl-record-evaluation-v1），不是首页数据集或单任务报告。可先用示例体验。</p><p>在项目目录运行以下命令生成一份报告，再为另一份记录生成不同文件名：</p><pre>node evaluate-records.cjs --input example.json --budget 20000 --output before.json</pre><p>“之前”只是你选择的对照起点，不会自动成为已批准的基准。</p></details>
+    <section id="empty" class="empty"><span class="empty-mark" aria-hidden="true">⇄</span><h2>让变化有据可查</h2><p>选好两份报告后，这里会说明条件是否变化、哪些记录被修改，以及哪些内容仍需核对。</p><p class="fine">比较已有记录，不启动 AI 或重新执行实验。</p></section>
+    <section id="results" hidden aria-label="报告对照结果">
+      <div id="verdict" class="verdict"><p class="eyebrow">先看结论的范围</p><h2 id="verdict-title"></h2><p id="verdict-message"></p><p id="demo-note" class="fine"></p></div>
+      <div class="result-meta"><p id="count"></p><button id="download" disabled>下载完整对照 JSON</button></div>
+      <section id="reason-section" class="reason-section" hidden><h2>为什么需要核对？</h2><div id="reasons" class="reasons"></div></section>
+      <section class="changes-section"><div class="section-heading"><h2>逐项查看变化</h2><div class="filters"><label>变化类型<select id="filter"><option value="all">全部变化</option><option value="status">验收状态</option><option value="evidence">证据文本</option><option value="recommendation">推荐结果</option><option value="added">新增</option><option value="removed">删除</option></select></label><label>搜索位置或内容<input id="search" type="search" placeholder="例如：名额、docs、unknown"></label></div></div><p id="filter-count" class="fine" role="status"></p><div id="changes"></div><button id="more" hidden>继续显示 40 项</button></section>
+      <details class="help"><summary>本次对照的依据与限制</summary><p id="validation"></p><ul id="limitations"></ul><pre id="provenance"></pre></details>
+    </section>
+    <footer>任务罗盘 · 报告对照<span>未知不等于通过，变化不自动等于改进。</span></footer>
+    <noscript>此页面需要启用 JavaScript。也可使用 compare-record-reports.cjs 命令。</noscript>
+  </main>
+</body>
+</html>

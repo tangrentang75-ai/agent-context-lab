@@ -21,6 +21,8 @@ Object.assign(allowed, {'/observation-audit.js':'observation-audit.js','/observa
 Object.assign(allowed, {'/observation-plan.js':'observation-plan.js'});
 Object.assign(allowed, {'/evidence-file-check.js':'evidence-file-check.js'});
 Object.assign(allowed, {'/project-review-backup.js':'project-review-backup.js'});
+Object.assign(allowed, {'/report-comparison.html':'report-comparison.html','/report-comparison.css':'report-comparison.css','/report-comparison.js':'report-comparison.js','/report-comparison-ui.js':'report-comparison-ui.js','/report-comparison-example.json':'report-comparison-example.json'});
+types['.json']='application/json; charset=utf-8';
 const port = Number(process.env.PORT || 4173);
 function createServer(executor=bridge,{passageReader=latestPassageStudy,taskExecutor=taskExecution,projectReviewReader=readReview}={}) {
 let running=false;

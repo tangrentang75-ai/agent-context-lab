@@ -1,0 +1,345 @@
+{
+  "demo": true,
+  "before": {
+    "schema": "acl-record-evaluation-v1",
+    "softwareVersion": "0.25.12",
+    "generatedAt": "2026-10-21T10:22:56.457Z",
+    "source": {
+      "sha256": "dc93595f5d273174b289a240987de092fe59dede5c4dde1f8d9d52ebe8eebca8",
+      "bytes": 3512,
+      "demo": true
+    },
+    "evaluator": {
+      "file": "evaluation.js",
+      "sha256": "3ea75c768122d1de6e56491b5dba8489e0b15577abf035226e7fab6d39c548cd"
+    },
+    "budgetTokensPerRun": 20000,
+    "summary": {
+      "taskCount": 1,
+      "groupCount": 1,
+      "groupsWithoutCandidate": 0,
+      "everyGroupHasCandidate": true
+    },
+    "limitations": [
+      "仅重评已有记录；不执行模型，也不独立核验证据或条件组真实性。",
+      "每组有候选不等于全部记录通过；人工构造示例不是实测效果。",
+      "token 不等于硬件算力或能源；哈希用于识别输入和规则，不证明内容真实。",
+      "报告包含目标和证据文本，分享前需检查私人信息；不能作为首页数据集重新导入。"
+    ],
+    "tasks": [
+      {
+        "id": "signup-fix",
+        "title": "修复活动报名与名额恢复",
+        "goals": [
+          {
+            "id": "refund",
+            "label": "取消报名后释放名额",
+            "required": true,
+            "weight": 5
+          },
+          {
+            "id": "duplicate",
+            "label": "重复请求不产生重复记录",
+            "required": true,
+            "weight": 5
+          },
+          {
+            "id": "regression",
+            "label": "原有报名流程正常",
+            "required": true,
+            "weight": 4
+          },
+          {
+            "id": "docs",
+            "label": "补充清晰的修改说明",
+            "required": false,
+            "weight": 2
+          }
+        ],
+        "groups": [
+          {
+            "comparisonGroup": "代码示例 / 同一版本与模型",
+            "bestIds": [
+              "code-b"
+            ],
+            "runs": [
+              {
+                "id": "code-a",
+                "strategy": "快速直接修改",
+                "model": "演示模型 / 非实际调用",
+                "tokens": 3200,
+                "durationSec": 84,
+                "checks": {
+                  "refund": {
+                    "status": "pass",
+                    "evidence": "模拟测试：取消后名额增加 1。"
+                  },
+                  "duplicate": {
+                    "status": "fail",
+                    "evidence": "模拟测试：重复请求创建了两条记录。"
+                  },
+                  "regression": {
+                    "status": "pass",
+                    "evidence": "模拟回归：普通报名通过。"
+                  },
+                  "docs": {
+                    "status": "fail",
+                    "evidence": "示例补丁没有修改说明。"
+                  }
+                },
+                "evaluation": {
+                  "score": 56,
+                  "known": 4,
+                  "total": 4,
+                  "accepted": false,
+                  "allReviewed": true,
+                  "eligible": false,
+                  "status": "未达必需项"
+                }
+              },
+              {
+                "id": "code-b",
+                "strategy": "针对目标探索",
+                "model": "演示模型 / 非实际调用",
+                "tokens": 7600,
+                "durationSec": 146,
+                "checks": {
+                  "refund": {
+                    "status": "pass",
+                    "evidence": "模拟独立测试：取消与释放名额一致。"
+                  },
+                  "duplicate": {
+                    "status": "pass",
+                    "evidence": "模拟测试：重复请求只创建一条记录。"
+                  },
+                  "regression": {
+                    "status": "pass",
+                    "evidence": "模拟回归：原有流程通过。"
+                  },
+                  "docs": {
+                    "status": "pass",
+                    "evidence": "示例记录包含修改原因与验证方式。"
+                  }
+                },
+                "evaluation": {
+                  "score": 100,
+                  "known": 4,
+                  "total": 4,
+                  "accepted": true,
+                  "allReviewed": true,
+                  "eligible": true,
+                  "status": "满足条件"
+                }
+              },
+              {
+                "id": "code-c",
+                "strategy": "广泛探索后修改",
+                "model": "演示模型 / 非实际调用",
+                "tokens": 14800,
+                "durationSec": 291,
+                "checks": {
+                  "refund": {
+                    "status": "pass",
+                    "evidence": "模拟测试通过。"
+                  },
+                  "duplicate": {
+                    "status": "pass",
+                    "evidence": "模拟测试通过。"
+                  },
+                  "regression": {
+                    "status": "pass",
+                    "evidence": "模拟回归通过。"
+                  },
+                  "docs": {
+                    "status": "pass",
+                    "evidence": "示例记录包含完整说明。"
+                  }
+                },
+                "evaluation": {
+                  "score": 100,
+                  "known": 4,
+                  "total": 4,
+                  "accepted": true,
+                  "allReviewed": true,
+                  "eligible": true,
+                  "status": "满足条件"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "after": {
+    "schema": "acl-record-evaluation-v1",
+    "softwareVersion": "0.25.12",
+    "generatedAt": "2026-10-21T10:22:56.458Z",
+    "source": {
+      "sha256": "dc7c314c7e3924169a8afb30c616338bf360b1a99212827e4e6cd627f45c5926",
+      "bytes": 3542,
+      "demo": true
+    },
+    "evaluator": {
+      "file": "evaluation.js",
+      "sha256": "3ea75c768122d1de6e56491b5dba8489e0b15577abf035226e7fab6d39c548cd"
+    },
+    "budgetTokensPerRun": 20000,
+    "summary": {
+      "taskCount": 1,
+      "groupCount": 1,
+      "groupsWithoutCandidate": 0,
+      "everyGroupHasCandidate": true
+    },
+    "limitations": [
+      "仅重评已有记录；不执行模型，也不独立核验证据或条件组真实性。",
+      "每组有候选不等于全部记录通过；人工构造示例不是实测效果。",
+      "token 不等于硬件算力或能源；哈希用于识别输入和规则，不证明内容真实。",
+      "报告包含目标和证据文本，分享前需检查私人信息；不能作为首页数据集重新导入。"
+    ],
+    "tasks": [
+      {
+        "id": "signup-fix",
+        "title": "修复活动报名与名额恢复",
+        "goals": [
+          {
+            "id": "refund",
+            "label": "取消报名后释放名额",
+            "required": true,
+            "weight": 5
+          },
+          {
+            "id": "duplicate",
+            "label": "重复请求不产生重复记录",
+            "required": true,
+            "weight": 5
+          },
+          {
+            "id": "regression",
+            "label": "原有报名流程正常",
+            "required": true,
+            "weight": 4
+          },
+          {
+            "id": "docs",
+            "label": "补充清晰的修改说明",
+            "required": false,
+            "weight": 2
+          }
+        ],
+        "groups": [
+          {
+            "comparisonGroup": "代码示例 / 同一版本与模型",
+            "bestIds": [
+              "code-c"
+            ],
+            "runs": [
+              {
+                "id": "code-a",
+                "strategy": "快速直接修改",
+                "model": "演示模型 / 非实际调用",
+                "tokens": 3200,
+                "durationSec": 84,
+                "checks": {
+                  "refund": {
+                    "status": "pass",
+                    "evidence": "模拟测试：取消后名额增加 1。"
+                  },
+                  "duplicate": {
+                    "status": "fail",
+                    "evidence": "模拟测试：重复请求创建了两条记录。"
+                  },
+                  "regression": {
+                    "status": "pass",
+                    "evidence": "模拟回归：普通报名通过。"
+                  },
+                  "docs": {
+                    "status": "fail",
+                    "evidence": "示例补丁没有修改说明。"
+                  }
+                },
+                "evaluation": {
+                  "score": 56,
+                  "known": 4,
+                  "total": 4,
+                  "accepted": false,
+                  "allReviewed": true,
+                  "eligible": false,
+                  "status": "未达必需项"
+                }
+              },
+              {
+                "id": "code-b",
+                "strategy": "针对目标探索",
+                "model": "演示模型 / 非实际调用",
+                "tokens": 7600,
+                "durationSec": 146,
+                "checks": {
+                  "refund": {
+                    "status": "pass",
+                    "evidence": "模拟独立测试：取消与释放名额一致。"
+                  },
+                  "duplicate": {
+                    "status": "pass",
+                    "evidence": "模拟测试：重复请求只创建一条记录。"
+                  },
+                  "regression": {
+                    "status": "pass",
+                    "evidence": "模拟回归：原有流程通过。"
+                  },
+                  "docs": {
+                    "status": "unknown",
+                    "evidence": "虚构示例：补充检查发现说明材料不足，需要重新核对。"
+                  }
+                },
+                "evaluation": {
+                  "score": 88,
+                  "known": 3,
+                  "total": 4,
+                  "accepted": true,
+                  "allReviewed": false,
+                  "eligible": false,
+                  "status": "证据待补"
+                }
+              },
+              {
+                "id": "code-c",
+                "strategy": "广泛探索后修改",
+                "model": "演示模型 / 非实际调用",
+                "tokens": 14800,
+                "durationSec": 291,
+                "checks": {
+                  "refund": {
+                    "status": "pass",
+                    "evidence": "模拟测试通过。"
+                  },
+                  "duplicate": {
+                    "status": "pass",
+                    "evidence": "模拟测试通过。"
+                  },
+                  "regression": {
+                    "status": "pass",
+                    "evidence": "模拟回归通过。"
+                  },
+                  "docs": {
+                    "status": "pass",
+                    "evidence": "示例记录包含完整说明。"
+                  }
+                },
+                "evaluation": {
+                  "score": 100,
+                  "known": 4,
+                  "total": 4,
+                  "accepted": true,
+                  "allReviewed": true,
+                  "eligible": true,
+                  "status": "满足条件"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
