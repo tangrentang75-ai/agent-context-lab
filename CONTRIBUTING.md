@@ -19,6 +19,8 @@
 
 执行 `npm test` 运行自动化测试。测试不调用模型。修改交互时，另用虚构数据在浏览器核对操作前后状态；不要用自动化测试去修改自己的真实存档。
 
+需要批量重评已有首页数据时，运行 `node evaluate-records.cjs --input example.json --budget 20000`。退出码 1 表示某组没有可推荐记录，不是命令执行错误；详见 [批量检查指南](record-evaluation-guide.md)。借鉴其他项目的工作按 [开源学习与改进记录](open-source-learning.md) 保留来源和验证依据。
+
 ## 提交改进
 
 - 建议先用 Issue 描述较大的设计改动，再创建自己的分支并提交 Pull Request。
