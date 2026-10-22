@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>报告对照 · 任务罗盘</title>
   <link rel="stylesheet" href="report-comparison.css">
-  <script defer src="evaluation.js"></script><script defer src="record-evaluation.js"></script><script defer src="report-comparison.js"></script><script defer src="report-comparison-ui.js"></script>
+  <script defer src="evaluation.js"></script><script defer src="record-evaluation.js"></script><script defer src="report-comparison.js"></script><script defer src="report-comparison-markdown.js"></script><script defer src="report-comparison-ui.js"></script>
 </head>
 <body>
   <a class="skip" href="#content">跳到主要内容</a>
@@ -28,7 +28,8 @@
     <section id="empty" class="empty"><span class="empty-mark" aria-hidden="true">⇄</span><h2>让变化有据可查</h2><p>选好两份报告后，这里会说明条件是否变化、哪些记录被修改，以及哪些内容仍需核对。</p><p class="fine">比较已有记录，不启动 AI 或重新执行实验。</p></section>
     <section id="results" hidden aria-label="报告对照结果">
       <div id="verdict" class="verdict"><p class="eyebrow">先看结论的范围</p><h2 id="verdict-title"></h2><p id="verdict-message"></p><p id="demo-note" class="fine"></p></div>
-      <div class="result-meta"><p id="count"></p><button id="download" disabled>下载完整对照 JSON</button></div>
+      <div class="result-meta"><p id="count"></p><div class="export-actions"><button id="download-readable" disabled>下载易读报告（Markdown）</button><button id="download" disabled>下载完整对照 JSON</button></div></div>
+      <p class="fine">两种下载均包含全部变化与证据，不受筛选影响。易读报告可用 Markdown 阅读器或文本编辑器打开；分享前检查私人信息。</p>
       <section id="reason-section" class="reason-section" hidden><h2>为什么需要核对？</h2><div id="reasons" class="reasons"></div></section>
       <section class="changes-section"><div class="section-heading"><h2>逐项查看变化</h2><div class="filters"><label>变化类型<select id="filter"><option value="all">全部变化</option><option value="status">验收状态</option><option value="evidence">证据文本</option><option value="recommendation">推荐结果</option><option value="added">新增</option><option value="removed">删除</option></select></label><label>搜索位置或内容<input id="search" type="search" placeholder="例如：名额、docs、unknown"></label></div></div><p id="filter-count" class="fine" role="status"></p><div id="changes"></div><button id="more" hidden>继续显示 40 项</button></section>
       <details class="help"><summary>本次对照的依据与限制</summary><p id="validation"></p><ul id="limitations"></ul><pre id="provenance"></pre></details>

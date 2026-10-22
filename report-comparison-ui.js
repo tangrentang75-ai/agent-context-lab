@@ -11,7 +11,7 @@
   const kinds = { added: '新增', removed: '删除', changed: '修改' };
   function node(tag, content, className) { const el = document.createElement(tag); if (content !== undefined) el.textContent = content; if (className) el.className = className; return el; }
   function notice(message, error = false) { $('notice').textContent = message; $('notice').className = error ? 'notice error' : 'notice'; }
-  function invalidate() { result = null; $('download').disabled = true; $('results').hidden = true; $('empty').hidden = false; $('changes').replaceChildren(); }
+  function invalidate() { result = null; $('download').disabled = true; $('download-readable').disabled = true; $('results').hidden = true; $('empty').hidden = false; $('changes').replaceChildren(); }
   function buttons() { $('compare').disabled = !engine || !records.before || !records.after; }
   function clearSide(side) { records[side] = null; $('' + side + '-name').textContent = '尚未选择'; }
   async function digest(bytes) { return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(v => v.toString(16).padStart(2, '0')).join(''); }
@@ -64,8 +64,8 @@
     accept(side, { report: structuredClone(generated.report), name: generated.name, sha256: generated.sha256 }); buttons();
     notice(`已把生成的报告作为“${side === 'before' ? '之前' : '之后'}”报告。${$('compare').disabled ? '请再准备另一份。' : '可以查看对照结果。'}`);
   }
-  function downloadJson(json, filename) {
-    const blob = new Blob([json], { type: 'application/json' });
+  function downloadJson(json, filename, type = 'application/json') {
+    const blob = new Blob([json], { type });
     const url = URL.createObjectURL(blob), link = node('a'); link.href = url; link.download = filename; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   async function decode(bytes, name) {
@@ -158,7 +158,7 @@
     $('limitations').replaceChildren(...result.limitations.map(line => node('li', line)));
     $('provenance').textContent = `之前报告文件 SHA-256：${records.before.sha256}\n之后报告文件 SHA-256：${records.after.sha256}`;
     visible = 40; $('filter').value = 'all'; $('search').value = ''; renderChanges();
-    $('empty').hidden = true; $('results').hidden = false; $('download').disabled = false;
+    $('empty').hidden = true; $('results').hidden = false; $('download').disabled = false; $('download-readable').disabled = false;
   }
   function compare() {
     if (!engine || !records.before || !records.after) return;
@@ -215,6 +215,11 @@
   $('download').addEventListener('click', () => {
     if (!result) return;
     downloadJson(JSON.stringify(result, null, 2) + '\n', 'report-comparison.json');
+  });
+  $('download-readable').addEventListener('click', () => {
+    if (!result) return;
+    const markdown = AgentReportMarkdown.renderComparisonMarkdown(result, { before: records.before.report, after: records.after.report });
+    downloadJson(markdown, 'report-comparison.md', 'text/markdown;charset=utf-8');
   });
   initialize();
 })();

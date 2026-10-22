@@ -39,6 +39,7 @@ async function harness({ failInit = false } = {}) {
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(require.resolve('./record-evaluation.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('./report-comparison.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('./report-comparison-markdown.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('./report-comparison-ui.js'), 'utf8'), context);
   for (let i = 0; i < 100 && get('before-file').disabled && get('retry').hidden; i++) await tick();
   return { get, downloads, requests, demo, context,
@@ -135,7 +136,7 @@ test('new page serves only explicit assets and a synthetic example, not report s
   const server = createServer(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
-  for (const asset of ['report-comparison.html', 'report-comparison.css', 'report-comparison.js', 'record-evaluation.js', 'report-comparison-ui.js', 'report-comparison-example.json']) {
+  for (const asset of ['report-comparison.html', 'report-comparison.css', 'report-comparison.js', 'report-comparison-markdown.js', 'record-evaluation.js', 'report-comparison-ui.js', 'report-comparison-example.json']) {
     const response = await fetch(base + '/' + asset); assert.equal(response.status, 200);
     if (asset.endsWith('.json')) { const f = await response.json(); assert.equal(f.demo, true); assert.equal(f.before.source.demo, true); assert.equal(f.after.source.demo, true); }
     else await response.text();
@@ -228,4 +229,42 @@ test('generated report hash matches the downloaded bytes used in the comparison'
   const expectedHash = require('node:crypto').createHash('sha256').update(json).digest('hex');
   assert.equal(comparison.reportFiles.beforeSha256, expectedHash); assert.equal(comparison.reportFiles.afterSha256, expectedHash);
   assert.equal(comparison.status, 'unchanged');
+});
+
+
+test('readable download includes all 80 changes even when no filtered row is visible', async () => {
+  const h = await harness(), d = taskData(); d.tasks = [d.tasks[0]];
+  const original = d.tasks[0].runs[0];
+  d.tasks[0].runs = Array.from({ length: 20 }, (_, i) => ({ ...structuredClone(original), id: 'readable-' + i }));
+  const before = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000);
+  for (const run of d.tasks[0].runs) for (const check of Object.values(run.checks)) check.evidence += ' 导出尾部校验';
+  const after = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000);
+  await h.import('before', file(before)); await h.import('after', file(after)); await h.get('compare').click();
+  assert.equal(h.get('changes').children.length, 40);
+  h.get('search').value = 'no-matching-record'; await h.get('search').emit('input');
+  assert.match(h.get('filter-count').textContent, /符合筛选 0 项/);
+  await h.get('download-readable').click();
+  const blob = h.downloads[0], text = await blob.text();
+  assert.equal(blob.type, 'text/markdown;charset=utf-8');
+  assert.equal((text.match(/^### \d+\./gm) || []).length, 80);
+  assert.equal((text.match(/导出尾部校验/g) || []).length, 80);
+  assert.ok(text.includes('readable-19'));
+  assert.deepEqual(h.requests, ['evaluation.js', '/api/local-info']);
+});
+
+test('readable download cannot reuse a comparison after pending, failed or reset inputs', async () => {
+  const h = await harness(), f = fixture();
+  await h.get('download-readable').click(); assert.equal(h.downloads.length, 0);
+  await h.import('before', file(f.before)); await h.import('after', file(f.after)); await h.get('compare').click();
+  assert.equal(h.get('download-readable').disabled, false);
+  const slow = deferred();
+  const loading = h.import('after', { name: 'slow.json', size: 2, arrayBuffer: () => slow.promise });
+  assert.equal(h.get('download-readable').disabled, true);
+  await h.get('download-readable').click(); assert.equal(h.downloads.length, 0);
+  slow.resolve(bytes({}).buffer); await loading;
+  await h.get('download-readable').click(); assert.equal(h.downloads.length, 0);
+  await h.import('after', file(f.after)); await h.get('compare').click(); await h.get('download-readable').click();
+  assert.equal(h.downloads.length, 1);
+  await h.get('reset').click(); assert.equal(h.get('download-readable').disabled, true);
+  await h.get('download-readable').click(); assert.equal(h.downloads.length, 1);
 });
