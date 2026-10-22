@@ -62,9 +62,9 @@
   function describeValue(value, path, report) {
     const type = shape(path), field = path.at(-1);
     if (type === 'recommendations' && Array.isArray(value)) return value.length
-      ? [{ kind: 'list', label: '推荐记录标识', items: value.map(id => JSON.stringify(id)) }]
-      : [{ kind: 'text', text: '没有推荐记录。' }];
-    if (!isStructured(value, path)) return [{ kind: 'code', text: valueText(value, field) }];
+      ? [{ kind: 'list', label: '推荐记录标识', items: value.map(id => JSON.stringify(id)), category: categoryForPath(path) }]
+      : [{ kind: 'text', text: '没有推荐记录。', category: categoryForPath(path) }];
+    if (!isStructured(value, path)) return [{ kind: 'code', text: valueText(value, field), category: categoryForPath(path) }];
     const entries = [], collection = { goals: '目标标识', groups: '条件组标识', runs: '记录标识', checks: '目标标识' };
     if (!Object.keys(value).length) return [{ kind: 'text', text: '没有条目。' }];
     for (const [key, child] of Object.entries(value)) {
@@ -79,7 +79,7 @@
       } else {
         const label = key === 'status' && type === 'evaluation' ? '评价结论' : Object.hasOwn(fields, key) ? fields[key] : key;
         const block = key === 'evidence' || (child !== null && typeof child === 'object') || (typeof child === 'string' && /[\r\n]/.test(child));
-        entries.push({ kind: 'field', label, text: valueText(child, key), block });
+        entries.push({ kind: 'field', label, text: valueText(child, key), block, category: categoryForPath(next) });
       }
     }
     return entries;

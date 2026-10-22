@@ -119,23 +119,32 @@
     }
     return parts.join(' / ');
   }
-  function appendReadable(parent, value, path, report) {
+  function appendReadable(parent, value, path, report, filterType) {
+    const matches = [];
     for (const entry of AgentReportPresentation.describeValue(value, path, report)) {
-      if (entry.kind === 'heading') parent.append(node('p', entry.text, 'value-heading'));
+      let container = parent;
+      if (entry.category && entry.category === filterType) {
+        container = node('div', undefined, 'value-match'); container.tabIndex = -1;
+        container.dataset.category = entry.category;
+        container.setAttribute('role', 'group'); container.setAttribute('aria-label', `匹配筛选：${categoryNames[filterType]}`);
+        container.append(node('span', '匹配筛选', 'match-label')); parent.append(container); matches.push(container);
+      }
+      if (entry.kind === 'heading') container.append(node('p', entry.text, 'value-heading'));
       else if (entry.kind === 'field') {
         const row = node('div', undefined, entry.block ? 'value-field value-block' : 'value-field');
         const content = node(entry.block ? 'pre' : 'span', entry.text, 'value-content');
         if (entry.block) content.tabIndex = 0;
         row.append(node('span', entry.label, 'value-label'), content);
-        parent.append(row);
+        container.append(row);
       } else if (entry.kind === 'list') {
         const list = node('ul', undefined, 'value-list');
         for (const item of entry.items) list.append(node('li', item));
-        parent.append(node('p', entry.label, 'value-heading'), list);
-      } else parent.append(node(entry.kind === 'code' ? 'pre' : 'p', entry.text));
+        container.append(node('p', entry.label, 'value-heading'), list);
+      } else container.append(node(entry.kind === 'code' ? 'pre' : 'p', entry.text));
     }
+    return matches;
   }
-  function renderSide(change, key, label) {
+  function renderSide(change, key, label, filterType) {
     const side = node('div', undefined, 'side'); side.append(node('h4', label));
     if (!Object.hasOwn(change, key)) { side.append(node('p', '此侧没有该条目')); return side; }
     const value = change[key], report = records[key].report;
@@ -143,13 +152,41 @@
       const details = node('details', undefined, 'structured-value');
       details.append(node('summary', '展开中文明细（含全部证据）'));
       // Build potentially large task trees only when the reader opens this side.
-      let built = false;
+      let built = false, matches = [], matchIndex = -1, locate = null, progress = null;
+      const build = () => {
+        if (built) return;
+        matches = appendReadable(details, value, change.path, report, filterType); built = true;
+        // Keep the next jump beside the matched field, even when the side's toolbar is far above it.
+        if (matches.length > 1) matches.forEach((target, index) => {
+          const next = node('button', '下一处匹配', 'next-match'); next.type = 'button';
+          next.addEventListener('click', () => moveTo(index + 1)); target.append(next);
+        });
+      };
+      function moveTo(index) {
+        if (!side.isConnected) return;
+        details.open = true; build();
+        if (!matches.length) { if (progress) progress.textContent = '此侧没有可定位的匹配字段。'; return; }
+        matchIndex = index % matches.length;
+        const target = matches[matchIndex];
+        target.focus({ preventScroll: true }); target.scrollIntoView({ block: 'center', behavior: 'instant' });
+        if (locate) locate.textContent = '定位下一处匹配';
+        if (progress) progress.textContent = `已定位第 ${matchIndex + 1} / ${matches.length} 处${categoryNames[filterType]}；这些位置仍属于同一项整体变化。`;
+      }
       details.addEventListener('toggle', () => {
-        if (!details.open || built) return;
-        appendReadable(details, value, change.path, report); built = true;
+        if (details.open && side.isConnected) build();
       });
+      if (Object.hasOwn(categoryNames, filterType) && categories(change).nested.includes(filterType)) {
+        locate = node('button', '定位匹配字段', 'locate-match'); locate.type = 'button';
+        progress = node('p', '定位后可继续跳转到下一处；匹配处数不计入变化项数。', 'match-progress');
+        progress.setAttribute('role', 'status'); progress.setAttribute('aria-live', 'polite');
+        locate.addEventListener('click', () => {
+          // Ignore an old detached control after a filter/input change or reset.
+          moveTo(matchIndex + 1);
+        });
+        side.append(locate, progress);
+      }
       side.append(details);
-    } else appendReadable(side, value, change.path, report);
+    } else appendReadable(side, value, change.path, report, filterType);
     return side;
   }
   function renderChanges() {
@@ -169,7 +206,7 @@
       }
       const sides = node('div', undefined, 'sides');
       for (const [key, label] of [['before', '之前'], ['after', '之后']]) {
-        sides.append(renderSide(change, key, label));
+        sides.append(renderSide(change, key, label, type));
       }
       card.append(sides);
       const details = node('details'); details.append(node('summary', '查看原始位置标识'), node('pre', JSON.stringify(change.path))); card.append(details);

@@ -14,16 +14,20 @@ const file = (value, name = 'report.json') => ({ name, size: bytes(value).byteLe
 async function harness({ failInit = false } = {}) {
   const elements = new Map(), downloads = [], requests = [], demo = deferred();
   class Element {
-    constructor(tag) { this.tagName = tag; this.children = []; this.listeners = {}; this.value = ''; this.textContent = ''; this.hidden = false; this.disabled = false; this.dataset = {}; }
+    constructor(tag) { this.tagName = tag; this.children = []; this.listeners = {}; this.value = ''; this.textContent = ''; this.hidden = false; this.disabled = false; this.dataset = {}; this.attributes = {}; this.parentNode = null; }
+    setAttribute(name, value) { this.attributes[name] = value; }
+    get isConnected() { return this === context.document.body || !!this.parentNode?.isConnected; }
+    focus() { context.document.activeElement = this; }
+    scrollIntoView() { this.scrolled = true; }
     addEventListener(name, fn) { this.listeners[name] = fn; }
     async emit(name) { return this.listeners[name]?.({ target: this }); }
-    append(...nodes) { this.children.push(...nodes); }
-    replaceChildren(...nodes) { this.children = [...nodes]; }
+    append(...nodes) { for (const n of nodes) n.parentNode = this; this.children.push(...nodes); }
+    replaceChildren(...nodes) { for (const n of this.children) n.parentNode = null; this.children = []; this.append(...nodes); }
     remove() {}
     click() { return this.emit('click'); }
     set innerHTML(_) { throw new Error('Imported text must not be rendered as HTML'); }
   }
-  const get = id => { if (!elements.has(id)) elements.set(id, new Element('div')); return elements.get(id); };
+  const get = id => { if (!elements.has(id)) { const e = new Element('div'); elements.set(id, e); context.document.body.append(e); } return elements.get(id); };
   let digest = (...args) => webcrypto.subtle.digest(...args);
   const context = { console, AgentEvaluation: require('./evaluation.js'), crypto: { subtle: { digest: (...args) => digest(...args) } }, TextDecoder, TextEncoder, Uint8Array, structuredClone, Blob, setTimeout: () => 0,
     URL: { createObjectURL: blob => { downloads.push(blob); return 'blob:report'; }, revokeObjectURL() {} },
@@ -150,6 +154,80 @@ const descendants = el => [el, ...el.children.flatMap(descendants)];
 const categoryOf = require('./report-comparison-presentation.js').changeCategories;
 async function filterBy(h, value) { h.get('filter').value = value; await h.get('filter').emit('change'); }
 async function compareData(h, before, after) { await h.import('before', file(before)); await h.import('after', file(after)); await h.get('compare').click(); }
+const matching = h => descendants(h.get('changes')).filter(e => e.className === 'value-match');
+const locatorButton = h => descendants(h.get('changes')).find(e => e.className === 'locate-match');
+async function nestedComparison(h, reverse = false) {
+  const d = taskData(); d.tasks = [d.tasks[0]]; d.tasks[0].runs = [d.tasks[0].runs[0]];
+  const before = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000), extra = structuredClone(d.tasks[0]);
+  extra.id = 'status'; extra.runs[0].id = 'eligible'; extra.runs[0].tokens = null;
+  extra.runs[0].checks.docs = { status: 'unknown', evidence: '' };
+  d.tasks.push(extra); const after = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000);
+  await compareData(h, reverse ? after : before, reverse ? before : after);
+}
+
+test('locating opens lazy details, focuses and cycles matching fields without duplication or export changes', async () => {
+  const h = await harness(); await nestedComparison(h); await filterBy(h, 'evidence');
+  const button = locatorButton(h), details = descendants(h.get('changes')).find(e => e.className === 'structured-value');
+  assert.equal(details.children.length, 1); assert.equal(matching(h).length, 0);
+  await h.get('download').click(); await h.get('download-readable').click();
+  await button.click(); assert.equal(details.open, true); assert.equal(matching(h).length, 4);
+  const targets = matching(h), count = details.children.length;
+  assert.equal(h.context.document.activeElement, targets[0]); assert.equal(targets[0].scrolled, true);
+  assert.ok(targets.every(e => e.dataset.category === 'evidence' && e.tabIndex === -1));
+  assert.ok(targets.every(e => h.text(e).includes('匹配筛选')));
+  for (let i = 1; i <= 4; i++) { await button.click(); assert.equal(h.context.document.activeElement, targets[i % 4]); }
+  await details.emit('toggle'); details.open = false; await details.emit('toggle'); await button.click();
+  assert.equal(details.children.length, count); assert.equal(matching(h).length, 4);
+  assert.match(h.text(h.get('changes')), /2 \/ 4 处证据文本/);
+  assert.match(h.get('filter-count').textContent, /共 1 项/);
+  await h.get('download').click(); await h.get('download-readable').click();
+  assert.equal(await h.downloads[0].text(), await h.downloads[2].text());
+  assert.equal(await h.downloads[1].text(), await h.downloads[3].text());
+});
+
+test('empty recommendations, false eligibility, empty evidence and unknown status remain locatable', async () => {
+  const h = await harness(); await nestedComparison(h);
+  await filterBy(h, 'recommendation'); await locatorButton(h).click();
+  assert.equal(matching(h).length, 2);
+  assert.match(h.text(matching(h)[0]), /没有推荐记录/);
+  assert.match(h.text(matching(h)[1]), /推荐资格否/);
+  await filterBy(h, 'status'); await expandDetails(h); const count = matching(h).length;
+  assert.equal(count, 4); assert.ok(matching(h).every(e => !h.text(e).includes('评价结论')));
+  assert.ok(matching(h).some(e => h.text(e).includes('证据待补')));
+  await locatorButton(h).click(); assert.equal(matching(h).length, count);
+  await filterBy(h, 'evidence'); await locatorButton(h).click();
+  assert.ok(matching(h).some(e => h.text(e).includes('（空文本）')));
+});
+
+test('only the populated side of a whole removal offers navigation and direct changes need none', async () => {
+  const h = await harness(); await nestedComparison(h, true); await filterBy(h, 'status');
+  const sides = descendants(h.get('changes')).filter(e => e.className === 'side');
+  assert.ok(descendants(sides[0]).some(e => e.className === 'locate-match'));
+  assert.ok(!descendants(sides[1]).some(e => e.className === 'locate-match'));
+  await locatorButton(h).click(); assert.equal(h.context.document.activeElement, matching(h)[0]);
+  const d = taskData(), before = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000);
+  d.tasks[0].runs[0].checks.docs.evidence += ' 新说明';
+  await compareData(h, before, evaluateRecords(Buffer.from(JSON.stringify(d)), 20000)); await filterBy(h, 'evidence');
+  assert.equal(locatorButton(h), undefined); assert.equal(matching(h).length, 2);
+  await filterBy(h, 'all'); assert.equal(matching(h).length, 0);
+});
+
+test('stale locator and delayed toggle cannot rebuild or steal focus after rerender, replacement or reset', async () => {
+  const h = await harness(); await nestedComparison(h); await filterBy(h, 'evidence');
+  const oldButton = locatorButton(h), oldDetails = descendants(h.get('changes')).find(e => e.className === 'structured-value');
+  await filterBy(h, 'status'); h.get('filter').focus(); await oldButton.click(); oldDetails.open = true; await oldDetails.emit('toggle');
+  assert.equal(h.context.document.activeElement, h.get('filter')); assert.equal(oldDetails.children.length, 1);
+  const statusButton = locatorButton(h); h.get('search').value = 'no-match'; await h.get('search').emit('input');
+  h.get('search').focus(); await statusButton.click(); assert.equal(h.context.document.activeElement, h.get('search'));
+  h.get('search').value = ''; await h.get('search').emit('input');
+  const pendingButton = locatorButton(h), slow = deferred();
+  const pending = h.import('after', { name: 'pending.json', size: 2, arrayBuffer: () => slow.promise });
+  h.get('after-file').focus(); await pendingButton.click(); assert.equal(h.context.document.activeElement, h.get('after-file'));
+  slow.resolve(bytes({}).buffer); await pending;
+  await nestedComparison(h); await filterBy(h, 'evidence'); const resetButton = locatorButton(h);
+  await h.get('reset').click(); h.get('reset').focus(); await resetButton.click();
+  assert.equal(h.context.document.activeElement, h.get('reset')); assert.equal(h.get('changes').children.length, 0);
+});
 
 test('whole task additions and removals match all relevant filters without splitting or changing identity', async () => {
   const h = await harness(), d = taskData(); d.tasks = [d.tasks[0]];
