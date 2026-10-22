@@ -46,7 +46,7 @@ test('unknown, missing, empty and full nested records remain distinguishable', (
   assert.match(text, /（空文本）/); assert.match(text, /此侧没有该条目/);
   assert.ok(text.includes(removed.checks.docs.evidence));
   const reversed = renderComparisonMarkdown(compareReports(after, before));
-  assert.match(reversed, /新增 · 条目变化/); assert.ok(reversed.includes(removed.checks.docs.evidence));
+  assert.match(reversed, /新增 · 整条运行记录/); assert.ok(reversed.includes(removed.checks.docs.evidence));
 });
 
 test('untrusted names and multiline evidence cannot introduce Markdown structure', () => {
@@ -76,4 +76,74 @@ test('unverified rules and conflicting source claims retain their warnings', () 
   after.tasks[0].groups[0].runs[0].checks.docs.evidence += ' 新说明';
   text = renderComparisonMarkdown(compareReports(before, after));
   assert.match(text, /来源声明有冲突/); assert.match(text, /不能据此认定改进/);
+});
+
+test('whole task additions and removals explain every goal and run without losing evidence', () => {
+  const d = data(), before = report(d), extra = structuredClone(d.tasks[0]);
+  extra.id = 'extra-task'; extra.title = '新增任务的说明';
+  extra.runs.forEach((r, i) => { r.id = 'extra-' + i; });
+  extra.runs[0].tokens = null; extra.runs[0].durationSec = null;
+  extra.runs[0].checks.docs = { status: 'unknown', evidence: '第一行\n```\n<img src=x>\n``````\n最后一行' };
+  d.tasks.push(extra); const after = report(d), changes = compareReports(before, after);
+  const original = structuredClone(changes);
+  const text = renderComparisonMarkdown(changes, { before, after });
+  assert.match(text, /新增 · 整个任务/); assert.match(text, /目标定义/); assert.match(text, /逐项目标验收/);
+  assert.match(text, /token 用量：未知/); assert.match(text, /耗时（秒）：未知/);
+  assert.match(text, /验收状态：证据待补/); assert.match(text, /评价结论：/);
+  for (const goal of extra.goals) assert.ok(text.includes(goal.label));
+  for (const run of extra.runs) for (const check of Object.values(run.checks)) assert.ok(text.includes(check.evidence));
+  assert.doesNotMatch(text, /"checks":|"evaluation":|"strategy":/);
+  assert.deepEqual(changes, original);
+  const removed = renderComparisonMarkdown(compareReports(after, before), { before: after, after: before });
+  assert.match(removed, /删除 · 整个任务/); assert.ok(removed.includes(extra.runs[0].checks.docs.evidence));
+});
+
+test('whole groups, empty recommendations and tied recommendations stay distinct', () => {
+  const d = data(), before = report(d), extra = structuredClone(d.tasks[0].runs[1]);
+  // Give both runs every check so equal token usage yields two genuine tied candidates.
+  for (const check of Object.values(extra.checks)) { check.status = 'pass'; check.evidence = '并列组的虚构证据'; }
+  extra.id = 'tie-1'; extra.comparisonGroup = '新条件组';
+  const second = { ...structuredClone(extra), id: 'tie-2' };
+  d.tasks[0].runs.push(extra, second);
+  const after = report(d);
+  let text = renderComparisonMarkdown(compareReports(before, after), { before, after });
+  assert.match(text, /新增 · 整个条件组/); assert.match(text, /推荐记录标识/);
+  assert.ok(text.includes('tie\\-1')); assert.ok(text.includes('tie\\-2'));
+  const noCandidate = report(d, 0);
+  text = renderComparisonMarkdown(compareReports(before, noCandidate), { before, after: noCandidate });
+  assert.match(text, /没有推荐记录/); assert.match(text, /推荐资格：否/);
+  assert.match(text, /评价结论：超过预算/);
+});
+
+test('identifiers named like schema fields cannot be mistaken for labels or skipped', () => {
+  const d = data(), before = report(d), extra = structuredClone(d.tasks[0]);
+  extra.id = '__proto__'; extra.title = '特殊编号任务';
+  const ids = ['__proto__', 'status', 'checks', 'bestIds'];
+  const old = extra.goals.map(g => g.id);
+  extra.goals.forEach((g, i) => { g.id = ids[i]; g.label = '编号目标' + i; });
+  extra.runs = [extra.runs[0]];
+  extra.runs[0].id = 'evidence'; extra.runs[0].comparisonGroup = 'status';
+  extra.runs[0].checks = Object.fromEntries(old.map((id, i) => [ids[i], extra.runs[0].checks[id]]));
+  d.tasks.push(extra); const after = report(d);
+  const text = renderComparisonMarkdown(compareReports(before, after), { before, after });
+  for (let i = 0; i < ids.length; i++) assert.ok(text.includes('编号目标' + i));
+  assert.match(text, /新增 · 整个任务/); assert.match(text, /条件组标识：/); assert.match(text, /记录标识：/);
+  for (const check of Object.values(extra.runs[0].checks)) assert.ok(text.includes(check.evidence));
+});
+
+test('removed records use the old goal names and goal changes retain definitions', () => {
+  const d = data(), before = report(d), removed = d.tasks[0].runs.pop();
+  const oldName = d.tasks[0].goals.find(g => g.id === 'docs').label;
+  d.tasks[0].goals.find(g => g.id === 'docs').label = '新版本说明目标';
+  const after = report(d), result = compareReports(before, after);
+  const text = renderComparisonMarkdown(result, { before, after });
+  const removedSection = text.split(/(?=^### \d+\.)/m).find(s => s.includes('删除 · 整条运行记录'));
+  assert.ok(removedSection.includes('目标名称：' + oldName));
+  assert.ok(!removedSection.includes('目标名称：新版本说明目标'));
+  assert.ok(removedSection.includes(removed.checks.docs.evidence));
+  const withGoal = structuredClone(d); withGoal.tasks[0].goals.push({ id: 'extra-goal', label: '新增可选目标', required: false, weight: 3 });
+  for (const run of withGoal.tasks[0].runs) run.checks['extra-goal'] = { status: 'unknown', evidence: '' };
+  const expanded = report(withGoal), addedText = renderComparisonMarkdown(compareReports(after, expanded), { before: after, after: expanded });
+  assert.match(addedText, /新增 · 验收目标/); assert.match(addedText, /目标权重：3/); assert.match(addedText, /是否为必需项：否/);
+  assert.match(addedText, /新增 · 目标验收项/); assert.match(addedText, /（空文本）/);
 });
