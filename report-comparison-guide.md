@@ -6,7 +6,7 @@
 
 运行 `npm start`，打开首页，点击左侧“**两份报告对照**”，也可以打开 http://127.0.0.1:4173/report-comparison.html 。若服务是在旧版本启动的，请重启服务以载入新增页面的白名单。
 
-1. 先点击“用示例体验”，查看虚构的证据补充场景。
+1. 先点击“用示例体验”，查看虚构的证据补充场景；如果手头只有首页任务数据，展开“还没有评估报告？从任务数据生成”，按 [网页生成说明](record-evaluation-guide.md) 生成报告。
 2. 选择“之前”和“之后”的两份完整评估报告，点击“查看对照结果”。
 3. 先看“为什么需要核对”，再用类型筛选和搜索查看状态、证据及推荐变化。
 4. 点击“下载完整对照 JSON”保存结果。筛选与分页仅影响屏幕显示，下载保留全部差异。
@@ -29,7 +29,7 @@ node compare-record-reports.cjs --before before.json --after after.json --output
 
 此例使用人工构造数据。差异报告会指出“预算从 20000 改成 5000”，并列出推荐结果变化；它不会说模型退步了。
 
-也可以运行 `npm run compare-record-reports -- --before before.json --after after.json`。输入必须是 `evaluate-records.cjs` 生成的 `acl-record-evaluation-v1` 报告，不是首页数据集、单任务网页报告或原始模型日志。
+也可以运行 `npm run compare-record-reports -- --before before.json --after after.json`。输入必须是网页生成区或 `evaluate-records.cjs` 生成的 `acl-record-evaluation-v1` 报告，不是首页数据集、单任务网页报告或原始模型日志。
 
 ## 结果怎么读
 

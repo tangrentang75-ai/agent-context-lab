@@ -34,43 +34,12 @@ function parseArgs(args) {
   return options;
 }
 
+const reportBuilder = require('./record-evaluation.js').createReportBuilder({
+  evaluation: E, ruleHash: hash(fs.readFileSync(require.resolve('./evaluation.js'))), softwareVersion: require('./package.json').version
+});
 function evaluateRecords(bytes, budget) {
   if (!Buffer.isBuffer(bytes) || bytes.length > MAX_BYTES) throw new Error('输入必须为不超过 2MiB 的 JSON 文件');
-  if (!Number.isFinite(budget) || budget < 0) throw new Error('预算必须是非负有限数');
-  const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  const data = E.validateDataset(JSON.parse(text));
-  const tasks = data.tasks.map(task => ({
-    id: task.id, title: task.title, goals: task.goals,
-    groups: [...new Set(task.runs.map(run => run.comparisonGroup))].map(comparisonGroup => {
-      const result = E.compare(task, budget, comparisonGroup);
-      return {
-        comparisonGroup, bestIds: result.bestIds,
-        runs: result.rows.map(({ run, evaluation }) => ({
-          id: run.id, strategy: run.strategy, model: run.model,
-          tokens: run.tokens, durationSec: run.durationSec, checks: run.checks, evaluation
-        }))
-      };
-    })
-  }));
-  const groups = tasks.flatMap(task => task.groups);
-  const groupsWithoutCandidate = groups.filter(group => !group.bestIds.length).length;
-  return {
-    schema: 'acl-record-evaluation-v1',
-    softwareVersion: require('./package.json').version,
-    generatedAt: new Date().toISOString(),
-    source: { sha256: hash(bytes), bytes: bytes.length, demo: data.demo },
-    evaluator: { file: 'evaluation.js', sha256: hash(fs.readFileSync(require.resolve('./evaluation.js'))) },
-    budgetTokensPerRun: budget,
-    summary: { taskCount: tasks.length, groupCount: groups.length, groupsWithoutCandidate,
-      everyGroupHasCandidate: groupsWithoutCandidate === 0 },
-    limitations: [
-      '仅重评已有记录；不执行模型，也不独立核验证据或条件组真实性。',
-      '每组有候选不等于全部记录通过；人工构造示例不是实测效果。',
-      'token 不等于硬件算力或能源；哈希用于识别输入和规则，不证明内容真实。',
-      '报告包含目标和证据文本，分享前需检查私人信息；不能作为首页数据集重新导入。'
-    ],
-    tasks
-  };
+  return reportBuilder.buildReport(reportBuilder.parseDataset(bytes), budget, { sha256: hash(bytes), bytes: bytes.length });
 }
 
 function main(args = process.argv.slice(2)) {

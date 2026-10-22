@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>报告对照 · 任务罗盘</title>
   <link rel="stylesheet" href="report-comparison.css">
-  <script defer src="evaluation.js"></script><script defer src="report-comparison.js"></script><script defer src="report-comparison-ui.js"></script>
+  <script defer src="evaluation.js"></script><script defer src="record-evaluation.js"></script><script defer src="report-comparison.js"></script><script defer src="report-comparison-ui.js"></script>
 </head>
 <body>
   <a class="skip" href="#content">跳到主要内容</a>
@@ -12,12 +12,19 @@
   <main id="content">
     <section class="intro"><div><p class="eyebrow">报告对照 / REVIEW CHANGES</p><h1>这一次，哪里变了？</h1><p class="subtitle">把两份评估放在一起，先核对条件，再逐项查看证据。</p></div><button id="demo" disabled>用示例体验</button></section>
     <p id="notice" class="notice" role="status" aria-live="polite">正在准备本机评价规则…</p><button id="retry" hidden>重新连接本机服务</button>
+    <details id="generator" class="generator">
+      <summary>还没有评估报告？从任务数据生成</summary>
+      <p>选择首页“保存当前数据”下载的 JSON，设置每条记录的预算，即可生成完整评估报告。只重评已有记录，不启动 AI。</p>
+      <div class="generator-fields"><div><label for="dataset-file">任务数据 · 最大 2MiB</label><input id="dataset-file" type="file" accept=".json,application/json" disabled><p id="dataset-name" class="file-name">尚未选择任务数据</p></div><div><label for="report-budget">每条记录的 token 上限</label><input id="report-budget" type="number" min="0" step="any" value="20000" disabled><p class="fine">不是全部任务的合计额度；0 也是有效预算。</p></div></div>
+      <button id="generate" class="primary" disabled>生成评估报告</button><p id="generator-notice" role="status" aria-live="polite">先选择任务数据，再确认预算。</p>
+      <div id="generated" class="generated" hidden><h2>评估报告已生成</h2><p id="generated-summary"></p><p id="generated-origin" class="fine"></p><div class="generator-actions"><button id="download-generated" disabled>下载评估报告</button><button id="use-before" disabled>作为“之前”报告</button><button id="use-after" disabled>作为“之后”报告</button></div><p class="fine">修改预算或任务数据后需重新生成。已送入对照区的副本不会跟随修改；新报告需再次送入。</p></div>
+    </details>
     <section class="imports" aria-label="选择两份评估报告">
       <div class="file-card"><span class="step">01 / 对照起点</span><h2>之前的报告</h2><label for="before-file">选择 JSON 报告</label><input id="before-file" type="file" accept=".json,application/json" disabled><p id="before-name" class="file-name">尚未选择</p></div>
       <div class="file-card"><span class="step">02 / 查看变化</span><h2>之后的报告</h2><label for="after-file">选择 JSON 报告</label><input id="after-file" type="file" accept=".json,application/json" disabled><p id="after-name" class="file-name">尚未选择</p></div>
     </section>
     <div class="actions"><button id="compare" class="primary" disabled>查看对照结果</button><button id="reset">清空本页</button><p>每份最大 16MiB。文件不上传、不自动保存；刷新前请下载结果。</p></div>
-    <details class="help"><summary>我应该选择哪种文件？</summary><p>选择离线批量检查生成的完整评估报告（acl-record-evaluation-v1），不是首页数据集或单任务报告。可先用示例体验。</p><p>在项目目录运行以下命令生成一份报告，再为另一份记录生成不同文件名：</p><pre>node evaluate-records.cjs --input example.json --budget 20000 --output before.json</pre><p>“之前”只是你选择的对照起点，不会自动成为已批准的基准。</p></details>
+    <details class="help"><summary>我应该选择哪种文件？</summary><p>上方生成区接收首页保存的任务数据；下方对照区接收完整评估报告（acl-record-evaluation-v1）。首页导出的单任务报告不能替代这两种文件。可先用示例体验。</p><p>也可以在项目目录运行以下命令生成报告：</p><pre>node evaluate-records.cjs --input example.json --budget 20000 --output before.json</pre><p>“之前”只是你选择的对照起点，不会自动成为已批准的基准。</p></details>
     <section id="empty" class="empty"><span class="empty-mark" aria-hidden="true">⇄</span><h2>让变化有据可查</h2><p>选好两份报告后，这里会说明条件是否变化、哪些记录被修改，以及哪些内容仍需核对。</p><p class="fine">比较已有记录，不启动 AI 或重新执行实验。</p></section>
     <section id="results" hidden aria-label="报告对照结果">
       <div id="verdict" class="verdict"><p class="eyebrow">先看结论的范围</p><h2 id="verdict-title"></h2><p id="verdict-message"></p><p id="demo-note" class="fine"></p></div>
