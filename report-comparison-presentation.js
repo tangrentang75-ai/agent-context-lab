@@ -33,6 +33,31 @@
     return type ? structures[type] : Object.hasOwn(fields, field) ? fields[field] : '条目变化';
   }
   function isStructured(value, path) { return value !== null && typeof value === 'object' && !Array.isArray(value) && shape(path) !== null; }
+  function categoryForPath(p) {
+    if (p[0] !== 'tasks' || p[2] !== 'groups') return null;
+    if (p.length === 5 && p[4] === 'bestIds') return 'recommendation';
+    if (p[4] !== 'runs') return null;
+    if (p.length === 8 && p[6] === 'evaluation' && p[7] === 'eligible') return 'recommendation';
+    if (p.length === 9 && p[6] === 'checks') {
+      if (p[8] === 'status') return 'status';
+      if (p[8] === 'evidence') return 'evidence';
+    }
+    return null;
+  }
+  // A nested match describes content carried by an added/removed item, not a new field-level diff.
+  function changeCategories(change) {
+    const direct = categoryForPath(change.path), nested = new Set();
+    function visit(value, path) {
+      const category = categoryForPath(path);
+      if (category) { nested.add(category); return; }
+      if (!isStructured(value, path)) return;
+      for (const [key, child] of Object.entries(value)) visit(child, [...path, key]);
+    }
+    if (!direct && ['added', 'removed'].includes(change.kind)) {
+      for (const side of ['before', 'after']) if (Object.hasOwn(change, side)) visit(change[side], change.path);
+    }
+    return { direct, nested: [...nested] };
+  }
   // Plain data for both text-only DOM and Markdown renderers. No HTML or scoring here.
   function describeValue(value, path, report) {
     const type = shape(path), field = path.at(-1);
@@ -59,7 +84,7 @@
     }
     return entries;
   }
-  const api = { describeValue, titleForPath, isStructured, valueText };
+  const api = { describeValue, titleForPath, isStructured, valueText, changeCategories };
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.AgentReportPresentation = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

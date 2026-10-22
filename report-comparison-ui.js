@@ -8,6 +8,12 @@
   const titles = { unchanged: '已检查的内容一致', conditions_changed: '比较条件有变化，先核对原因', inconsistent: '来源声明有冲突，请先核对文件' };
   const reasonTitles = { source_changed: '两份报告来自不同输入', source_metadata_changed: '输入说明发生变化', budget_changed: '预算变了', rules_changed: '评分规则变了', rules_unverified: '部分评分规则尚未核验', identity_conflict: '来源说明与内容对不上' };
   const kinds = { added: '新增', removed: '删除', changed: '修改' };
+  const categoryNames = { status: '验收状态', evidence: '证据文本', recommendation: '推荐结果或资格' };
+  const categoryCache = new WeakMap();
+  function categories(change) {
+    if (!categoryCache.has(change)) categoryCache.set(change, AgentReportPresentation.changeCategories(change));
+    return categoryCache.get(change);
+  }
   function node(tag, content, className) { const el = document.createElement(tag); if (content !== undefined) el.textContent = content; if (className) el.className = className; return el; }
   function notice(message, error = false) { $('notice').textContent = message; $('notice').className = error ? 'notice error' : 'notice'; }
   function invalidate() { result = null; $('download').disabled = true; $('download-readable').disabled = true; $('results').hidden = true; $('empty').hidden = false; $('changes').replaceChildren(); }
@@ -150,8 +156,7 @@
     if (!result) return;
     const type = $('filter').value, query = $('search').value.trim().toLowerCase();
     const filtered = result.changes.filter(change => {
-      const last = change.path.at(-1);
-      const match = type === 'all' || (type === 'status' && change.path[6] === 'checks' && last === 'status') || (type === 'evidence' && last === 'evidence') || (type === 'recommendation' && ['bestIds', 'eligible'].includes(last)) || change.kind === type;
+      const match = type === 'all' || change.kind === type || categories(change).direct === type || categories(change).nested.includes(type);
       return match && (!query || (context(change) + JSON.stringify(change)).toLowerCase().includes(query));
     });
     $('changes').replaceChildren();
@@ -159,6 +164,9 @@
       const card = node('article', undefined, 'change'), heading = node('div', undefined, 'change-heading');
       const h3 = node('h3'); h3.append(node('span', kinds[change.kind], 'badge'), node('span', AgentReportPresentation.titleForPath(change.path)));
       heading.append(h3, node('p', context(change))); card.append(heading);
+      if (Object.hasOwn(categoryNames, type) && categories(change).nested.includes(type)) {
+        heading.append(node('p', `本项是整项${kinds[change.kind]}，其中包含${categoryNames[type]}；仍计为 1 项整体变化，不代表这些字段被逐一修改。`, 'filter-match'));
+      }
       const sides = node('div', undefined, 'sides');
       for (const [key, label] of [['before', '之前'], ['after', '之后']]) {
         sides.append(renderSide(change, key, label));

@@ -147,6 +147,84 @@ test('new page serves only explicit assets and a synthetic example, not report s
 
 const taskData = () => JSON.parse(fs.readFileSync(require.resolve('./example.json'), 'utf8'));
 const descendants = el => [el, ...el.children.flatMap(descendants)];
+const categoryOf = require('./report-comparison-presentation.js').changeCategories;
+async function filterBy(h, value) { h.get('filter').value = value; await h.get('filter').emit('change'); }
+async function compareData(h, before, after) { await h.import('before', file(before)); await h.import('after', file(after)); await h.get('compare').click(); }
+
+test('whole task additions and removals match all relevant filters without splitting or changing identity', async () => {
+  const h = await harness(), d = taskData(); d.tasks = [d.tasks[0]];
+  const before = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000), extra = structuredClone(d.tasks[0]);
+  extra.id = 'new-task'; extra.runs = [extra.runs[0]]; extra.runs[0].id = 'new-run';
+  d.tasks.push(extra); const after = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000);
+  for (const [left, right, kind] of [[before, after, '新增'], [after, before, '删除']]) {
+    await compareData(h, left, right);
+    for (const type of ['status', 'evidence', 'recommendation']) {
+      await filterBy(h, type);
+      assert.equal(h.get('changes').children.length, 1);
+      const text = h.text(h.get('changes'));
+      assert.ok(text.includes(kind + '整个任务')); assert.ok(text.includes('整项' + kind));
+      assert.match(text, /不代表这些字段被逐一修改/); assert.match(h.get('filter-count').textContent, /符合筛选 1 项/);
+      assert.equal(descendants(h.get('changes')).filter(e => e.className === 'structured-value')[0].children.length, 1);
+    }
+  }
+});
+
+test('unknown and empty added checks match while goal definitions named evidence do not', async () => {
+  const h = await harness(), d = taskData(); d.tasks = [d.tasks[0]]; d.tasks[0].runs = [d.tasks[0].runs[0]];
+  const before = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000);
+  d.tasks[0].goals.push({ id: 'evidence', label: '新增目标', required: false, weight: 1 });
+  d.tasks[0].runs[0].checks.evidence = { status: 'unknown', evidence: '' };
+  const after = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000);
+  await compareData(h, before, after);
+  for (const type of ['status', 'evidence']) {
+    await filterBy(h, type); assert.match(h.get('filter-count').textContent, /符合筛选 1 项/);
+    assert.match(h.text(h.get('changes')), /新增目标验收项/); assert.doesNotMatch(h.text(h.get('changes')), /新增验收目标/);
+    await expandDetails(h); assert.match(h.text(h.get('changes')), /证据待补/); assert.match(h.text(h.get('changes')), /（空文本）/);
+  }
+});
+
+test('recommendation matching includes empty lists and false eligibility but excludes evaluation status and score', () => {
+  const group = ['tasks', 't', 'groups', 'g'], run = [...group, 'runs', 'r'];
+  for (const [path, after] of [[ [...group, 'bestIds'], [] ], [ [...run, 'evaluation', 'eligible'], false ]]) {
+    assert.equal(categoryOf({ path, kind: 'changed', after }).direct, 'recommendation');
+  }
+  const nested = categoryOf({ path: [...run, 'evaluation'], kind: 'added', after: { eligible: false, status: '证据待补', score: 0 } });
+  assert.deepEqual(nested, { direct: null, nested: ['recommendation'] });
+  for (const field of ['score', 'status', 'accepted', 'allReviewed']) {
+    assert.deepEqual(categoryOf({ path: [...run, 'evaluation', field], kind: 'changed', before: 0, after: 1 }), { direct: null, nested: [] });
+  }
+});
+
+test('special IDs and unrelated text cannot impersonate a structural category', () => {
+  for (const id of ['evidence', 'status', 'bestIds', 'eligible', '__proto__']) {
+    for (const path of [['tasks', id], ['tasks', 't', 'goals', id], ['tasks', 't', 'groups', id], ['tasks', 't', 'groups', 'g', 'runs', id]]) {
+      assert.deepEqual(categoryOf({ path, kind: 'added', after: { title: 'evidence bestIds eligible', label: 'status' } }), { direct: null, nested: [] });
+    }
+    const path = ['tasks', id, 'groups', id, 'runs', id, 'checks', id];
+    assert.deepEqual(categoryOf({ path, kind: 'removed', before: { status: 'unknown', evidence: '' } }), { direct: null, nested: ['status', 'evidence'] });
+    assert.deepEqual(categoryOf({ path: [...path, 'evidence'], kind: 'changed', after: '说明' }), { direct: 'evidence', nested: [] });
+  }
+});
+
+test('nested filters compose with search and paging while both downloads retain every original change', async () => {
+  const h = await harness(), d = taskData(); d.tasks = [d.tasks[0]]; d.tasks[0].runs = [d.tasks[0].runs[0]];
+  const before = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000), seed = structuredClone(d.tasks[0]);
+  for (let i = 0; i < 50; i++) {
+    const task = structuredClone(seed); task.id = 'nested-' + i; task.title = '嵌套任务' + i; task.runs[0].id = 'nested-run-' + i; d.tasks.push(task);
+  }
+  const after = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000);
+  await compareData(h, before, after); await filterBy(h, 'evidence');
+  assert.match(h.get('filter-count').textContent, /符合筛选 50 项，已显示 40 项/);
+  await h.get('more').click(); assert.equal(h.get('changes').children.length, 50);
+  h.get('search').value = '嵌套任务49'; await h.get('search').emit('input');
+  assert.match(h.get('filter-count').textContent, /符合筛选 1 项/);
+  h.get('search').value = 'no-such-task'; await h.get('search').emit('input');
+  assert.match(h.get('filter-count').textContent, /符合筛选 0 项/);
+  await h.get('download').click(); const json = JSON.parse(await h.downloads[0].text());
+  assert.equal(json.changeCount, 50); assert.ok(json.changes.every(c => c.kind === 'added' && c.path.length === 2));
+  await h.get('download-readable').click(); assert.equal(((await h.downloads[1].text()).match(/^### \d+\./gm) || []).length, 50);
+});
+
 async function expandDetails(h) {
   for (const el of descendants(h.get('changes')).filter(e => e.className === 'structured-value')) { el.open = true; await el.emit('toggle'); }
 }
