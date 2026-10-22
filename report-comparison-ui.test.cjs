@@ -39,6 +39,7 @@ async function harness({ failInit = false } = {}) {
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(require.resolve('./record-evaluation.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('./report-comparison.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(require.resolve('./report-comparison-presentation.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('./report-comparison-markdown.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(require.resolve('./report-comparison-ui.js'), 'utf8'), context);
   for (let i = 0; i < 100 && get('before-file').disabled && get('retry').hidden; i++) await tick();
@@ -136,7 +137,7 @@ test('new page serves only explicit assets and a synthetic example, not report s
   const server = createServer(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
-  for (const asset of ['report-comparison.html', 'report-comparison.css', 'report-comparison.js', 'report-comparison-markdown.js', 'record-evaluation.js', 'report-comparison-ui.js', 'report-comparison-example.json']) {
+  for (const asset of ['report-comparison.html', 'report-comparison.css', 'report-comparison.js', 'report-comparison-presentation.js', 'report-comparison-markdown.js', 'record-evaluation.js', 'report-comparison-ui.js', 'report-comparison-example.json']) {
     const response = await fetch(base + '/' + asset); assert.equal(response.status, 200);
     if (asset.endsWith('.json')) { const f = await response.json(); assert.equal(f.demo, true); assert.equal(f.before.source.demo, true); assert.equal(f.after.source.demo, true); }
     else await response.text();
@@ -145,6 +146,61 @@ test('new page serves only explicit assets and a synthetic example, not report s
 });
 
 const taskData = () => JSON.parse(fs.readFileSync(require.resolve('./example.json'), 'utf8'));
+const descendants = el => [el, ...el.children.flatMap(descendants)];
+async function expandDetails(h) {
+  for (const el of descendants(h.get('changes')).filter(e => e.className === 'structured-value')) { el.open = true; await el.emit('toggle'); }
+}
+
+test('whole task UI expands safely on demand and collapsed content still exports in full', async () => {
+  const h = await harness(), d = taskData(); d.tasks = [d.tasks[0]];
+  const before = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000), extra = structuredClone(d.tasks[0]);
+  extra.id = 'status'; extra.title = '<img src=x onerror=alert(1)> 新增任务';
+  extra.runs = [extra.runs[0]]; extra.runs[0].id = '__proto__'; extra.runs[0].tokens = null;
+  const evidence = '<script>alert(1)</script>\n```\n完整证据尾部';
+  extra.runs[0].checks.docs = { status: 'unknown', evidence };
+  d.tasks.push(extra); const after = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000);
+  await h.import('before', file(before)); await h.import('after', file(after)); await h.get('compare').click();
+  const details = descendants(h.get('changes')).find(e => e.className === 'structured-value');
+  assert.equal(details.children.length, 1); assert.match(h.text(h.get('changes')), /整个任务/);
+  await h.get('download-readable').click(); assert.ok((await h.downloads[0].text()).includes(evidence));
+  await h.get('download').click(); assert.equal(JSON.parse(await h.downloads[1].text()).changes[0].after.groups[extra.runs[0].comparisonGroup].runs.__proto__.checks.docs.evidence, evidence);
+  await expandDetails(h); const count = details.children.length;
+  const text = h.text(details); assert.match(text, /token 用量未知（null）/); assert.match(text, /目标定义/); assert.match(text, /验收状态证据待补/);
+  assert.ok(text.includes(evidence)); assert.doesNotMatch(text, /"checks":|"evaluation":/);
+  assert.ok(!descendants(details).some(e => ['img', 'script', 'iframe', 'a'].includes(e.tagName)));
+  details.open = false; await details.emit('toggle'); details.open = true; await details.emit('toggle');
+  assert.equal(details.children.length, count);
+  await h.get('reset').click(); assert.equal(h.get('changes').children.length, 0);
+});
+
+test('removed run details preserve old goal names while newly added checks show unknown and empty', async () => {
+  const h = await harness(), d = taskData(); d.tasks = [d.tasks[0]];
+  const before = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000);
+  const oldName = d.tasks[0].goals.find(g => g.id === 'docs').label;
+  d.tasks[0].runs.pop(); d.tasks[0].goals.find(g => g.id === 'docs').label = '新版目标名称';
+  d.tasks[0].goals.push({ id: 'new-goal', label: '新增可选目标', required: false, weight: 3 });
+  for (const run of d.tasks[0].runs) run.checks['new-goal'] = { status: 'unknown', evidence: '' };
+  const after = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000);
+  await h.import('before', file(before)); await h.import('after', file(after)); await h.get('compare').click(); await expandDetails(h);
+  const removed = h.get('changes').children.find(c => h.text(c.children[0]).includes('删除整条运行记录'));
+  assert.ok(h.text(removed).includes(oldName)); assert.ok(!h.text(removed).includes('新版目标名称'));
+  const text = h.text(h.get('changes')); assert.match(text, /验收目标/); assert.match(text, /是否为必需项否/); assert.match(text, /（空文本）/);
+});
+
+test('whole group details show every tied recommendation and distinguish no recommendation', async () => {
+  const h = await harness(), d = taskData(); d.tasks = [d.tasks[0]];
+  const before = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000), extra = structuredClone(d.tasks[0].runs[0]);
+  for (const check of Object.values(extra.checks)) { check.status = 'pass'; check.evidence = '虚构并列证据'; }
+  extra.id = 'tie-first'; extra.comparisonGroup = 'added-group';
+  d.tasks[0].runs.push(extra, { ...structuredClone(extra), id: 'tie-second' });
+  const after = evaluateRecords(Buffer.from(JSON.stringify(d)), 20000);
+  await h.import('before', file(before)); await h.import('after', file(after)); await h.get('compare').click(); await expandDetails(h);
+  const list = descendants(h.get('changes')).find(e => e.className === 'value-list');
+  assert.deepEqual(list.children.map(e => e.textContent), ['"tie-first"', '"tie-second"']);
+  await h.import('after', file(evaluateRecords(Buffer.from(JSON.stringify(d)), 0))); await h.get('compare').click(); await expandDetails(h);
+  assert.match(h.text(h.get('changes')), /没有推荐记录/); assert.match(h.text(h.get('changes')), /评价结论超过预算/);
+});
+
 async function preparedGenerator() {
   const h = await harness(); h.get('report-budget').value = '20000';
   await h.importDataset(file(taskData(), 'tasks.json')); return h;

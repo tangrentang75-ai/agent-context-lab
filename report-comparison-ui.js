@@ -7,7 +7,6 @@
   let dataset = null, generated = null, datasetEpoch = 0, generationEpoch = 0;
   const titles = { unchanged: '已检查的内容一致', conditions_changed: '比较条件有变化，先核对原因', inconsistent: '来源声明有冲突，请先核对文件' };
   const reasonTitles = { source_changed: '两份报告来自不同输入', source_metadata_changed: '输入说明发生变化', budget_changed: '预算变了', rules_changed: '评分规则变了', rules_unverified: '部分评分规则尚未核验', identity_conflict: '来源说明与内容对不上' };
-  const fields = { status: '验收状态', evidence: '证据文本', tokens: 'token 用量', durationSec: '耗时（秒）', score: '目标得分', eligible: '推荐资格', bestIds: '推荐记录', label: '目标名称', weight: '目标权重', required: '是否为必需项', model: '模型', strategy: '策略', title: '任务名称', known: '已核验目标数', total: '目标总数', accepted: '必需目标是否满足', allReviewed: '是否全部核验' };
   const kinds = { added: '新增', removed: '删除', changed: '修改' };
   function node(tag, content, className) { const el = document.createElement(tag); if (content !== undefined) el.textContent = content; if (className) el.className = className; return el; }
   function notice(message, error = false) { $('notice').textContent = message; $('notice').className = error ? 'notice error' : 'notice'; }
@@ -114,6 +113,39 @@
     }
     return parts.join(' / ');
   }
+  function appendReadable(parent, value, path, report) {
+    for (const entry of AgentReportPresentation.describeValue(value, path, report)) {
+      if (entry.kind === 'heading') parent.append(node('p', entry.text, 'value-heading'));
+      else if (entry.kind === 'field') {
+        const row = node('div', undefined, entry.block ? 'value-field value-block' : 'value-field');
+        const content = node(entry.block ? 'pre' : 'span', entry.text, 'value-content');
+        if (entry.block) content.tabIndex = 0;
+        row.append(node('span', entry.label, 'value-label'), content);
+        parent.append(row);
+      } else if (entry.kind === 'list') {
+        const list = node('ul', undefined, 'value-list');
+        for (const item of entry.items) list.append(node('li', item));
+        parent.append(node('p', entry.label, 'value-heading'), list);
+      } else parent.append(node(entry.kind === 'code' ? 'pre' : 'p', entry.text));
+    }
+  }
+  function renderSide(change, key, label) {
+    const side = node('div', undefined, 'side'); side.append(node('h4', label));
+    if (!Object.hasOwn(change, key)) { side.append(node('p', '此侧没有该条目')); return side; }
+    const value = change[key], report = records[key].report;
+    if (AgentReportPresentation.isStructured(value, change.path)) {
+      const details = node('details', undefined, 'structured-value');
+      details.append(node('summary', '展开中文明细（含全部证据）'));
+      // Build potentially large task trees only when the reader opens this side.
+      let built = false;
+      details.addEventListener('toggle', () => {
+        if (!details.open || built) return;
+        appendReadable(details, value, change.path, report); built = true;
+      });
+      side.append(details);
+    } else appendReadable(side, value, change.path, report);
+    return side;
+  }
   function renderChanges() {
     if (!result) return;
     const type = $('filter').value, query = $('search').value.trim().toLowerCase();
@@ -125,11 +157,11 @@
     $('changes').replaceChildren();
     for (const change of filtered.slice(0, visible)) {
       const card = node('article', undefined, 'change'), heading = node('div', undefined, 'change-heading');
-      const h3 = node('h3'), field = change.path.at(-1); h3.append(node('span', kinds[change.kind], 'badge'), node('span', Object.hasOwn(fields, field) ? fields[field] : '条目变化'));
+      const h3 = node('h3'); h3.append(node('span', kinds[change.kind], 'badge'), node('span', AgentReportPresentation.titleForPath(change.path)));
       heading.append(h3, node('p', context(change))); card.append(heading);
       const sides = node('div', undefined, 'sides');
       for (const [key, label] of [['before', '之前'], ['after', '之后']]) {
-        const side = node('div', undefined, 'side'); side.append(node('h4', label), node('pre', Object.hasOwn(change, key) ? display(change[key], change.path.at(-1)) : '此侧没有该条目')); sides.append(side);
+        sides.append(renderSide(change, key, label));
       }
       card.append(sides);
       const details = node('details'); details.append(node('summary', '查看原始位置标识'), node('pre', JSON.stringify(change.path))); card.append(details);

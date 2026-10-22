@@ -2,7 +2,7 @@
   'use strict';
   const titles = { unchanged: '已检查的内容一致', conditions_changed: '比较条件有变化，先核对原因', inconsistent: '来源声明有冲突，请先核对文件' };
   const kinds = { added: '新增', removed: '删除', changed: '修改' };
-  const fields = { status: '验收状态', evidence: '证据文本', tokens: 'token 用量', durationSec: '耗时（秒）', score: '目标得分', eligible: '推荐资格', bestIds: '推荐记录', label: '目标名称', weight: '目标权重', required: '是否为必需项', model: '模型', strategy: '策略', title: '任务名称', known: '已核验目标数', total: '目标总数', accepted: '必需目标是否满足', allReviewed: '是否全部核验' };
+  const P = typeof module === 'object' && module.exports ? require('./report-comparison-presentation.js') : root.AgentReportPresentation;
   // Imported names stay on one line and cannot create Markdown links, images or HTML.
   function inline(value) {
     return String(value).replace(/[\u0000-\u001f\u007f\u2028\u2029]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'))
@@ -16,14 +16,6 @@
     const fence = '`'.repeat(length);
     return `${fence}\n${text}\n${fence}`;
   }
-  function valueText(value, field) {
-    if (value === null) return '未知（null）';
-    if (value === true) return '是'; if (value === false) return '否';
-    if (value === '') return '（空文本）';
-    const statuses = { pass: '通过（pass）', fail: '未通过（fail）', unknown: '证据待补（unknown）' };
-    if (field === 'status' && Object.hasOwn(statuses, value)) return statuses[value];
-    return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
-  }
   function context(path, reports) {
     const before = reports.before?.tasks.find(t => t.id === path[1]);
     const after = reports.after?.tasks.find(t => t.id === path[1]);
@@ -35,46 +27,13 @@
     if (goalId) parts.push(`目标：${after?.goals.find(g => g.id === goalId)?.label || before?.goals.find(g => g.id === goalId)?.label || goalId}`);
     return parts.map(inline).join(' / ');
   }
-  // Match structural positions, not identifier text: IDs may themselves be "status" or "__proto__".
-  function shape(p) {
-    if (p[0] !== 'tasks') return null;
-    if (p.length === 2) return 'task';
-    if (p[2] === 'goals') return p.length === 3 ? 'goals' : p.length === 4 ? 'goal' : null;
-    if (p[2] !== 'groups') return null;
-    if (p.length === 3) return 'groups';
-    if (p.length === 4) return 'group';
-    if (p[4] === 'bestIds' && p.length === 5) return 'recommendations';
-    if (p[4] !== 'runs') return null;
-    if (p.length === 5) return 'runs';
-    if (p.length === 6) return 'run';
-    if (p[6] === 'evaluation' && p.length === 7) return 'evaluation';
-    if (p[6] === 'checks') return p.length === 7 ? 'checks' : p.length === 8 ? 'check' : null;
-    return null;
-  }
-  const structures = { task: '整个任务', group: '整个条件组', run: '整条运行记录', goal: '验收目标', check: '目标验收项', goals: '目标定义', groups: '条件组', runs: '运行记录', checks: '逐项目标验收', evaluation: '该记录的评价', recommendations: '推荐记录' };
   function readableValue(value, path, report) {
-    const type = shape(path), field = path.at(-1);
-    if (type === 'recommendations' && Array.isArray(value)) return value.length ? ['推荐记录标识：', '', ...value.map(id => `- ${inline(JSON.stringify(id))}`)].join('\n') : '没有推荐记录。';
-    if (value === null || typeof value !== 'object' || Array.isArray(value) || !type) return block(valueText(value, field));
-    const lines = [], collection = { goals: '目标标识', groups: '条件组标识', runs: '记录标识', checks: '目标标识' };
-    if (!Object.keys(value).length) return '没有条目。';
-    for (const [key, child] of Object.entries(value)) {
-      const next = [...path, key], childType = shape(next);
-      if (Object.hasOwn(collection, type)) {
-        const goal = type === 'checks' ? report?.tasks.find(t => t.id === path[1])?.goals.find(g => g.id === key) : null;
-        lines.push(`**${collection[type]}：${inline(JSON.stringify(key))}**`, '');
-        if (goal) lines.push(`目标名称：${inline(goal.label)}`, '');
-        lines.push(readableValue(child, next, report), '');
-      } else if (childType) {
-        lines.push(`**${structures[childType]}**`, '', readableValue(child, next, report), '');
-      } else {
-        const label = key === 'status' && type === 'evaluation' ? '评价结论' : Object.hasOwn(fields, key) ? fields[key] : key;
-        // Keep multiline evidence intact and separately fenced, rather than reindenting or summarizing it.
-        if (key === 'evidence' || (child !== null && typeof child === 'object') || (typeof child === 'string' && /[\r\n]/.test(child))) lines.push(`**${inline(label)}**`, '', block(valueText(child, key)), '');
-        else lines.push(`${inline(label)}：${inline(valueText(child, key))}`, '');
-      }
-    }
-    return lines.join('\n').trimEnd();
+    return P.describeValue(value, path, report).map(entry => {
+      if (entry.kind === 'heading') return '**' + inline(entry.text) + '**';
+      if (entry.kind === 'field') return entry.block ? '**' + inline(entry.label) + '**\n\n' + block(entry.text) : inline(entry.label) + '：' + inline(entry.text);
+      if (entry.kind === 'list') return inline(entry.label) + '：\n\n' + entry.items.map(id => '- ' + inline(id)).join('\n');
+      return entry.kind === 'code' ? block(entry.text) : inline(entry.text);
+    }).join('\n\n');
   }
   // Presentation only: callers pass the current comparator result and validated reports.
   function renderComparisonMarkdown(result, reports = {}) {
@@ -96,15 +55,13 @@
         const value = reason[side];
         if (reason.code === 'budget_changed') lines.push(`${label}：每条记录 ${value} token。`, '');
         else if (reason.code === 'source_metadata_changed') lines.push(`${label}：输入大小 ${value.bytes} 字节；${value.demo ? '人工构造示例' : '来源由提供者声明'}。`, '');
-        else lines.push(`${label}：`, '', block(valueText(value)), '');
+        else lines.push(`${label}：`, '', block(P.valueText(value)), '');
       }
     }
     lines.push('## 逐项变化', '');
     if (!result.changes.length) lines.push('已检查字段没有变化；这不等于比较条件相同，也不等于所有目标通过。', '');
     for (const [i, change] of result.changes.entries()) {
-      const field = change.path.at(-1);
-      const type = shape(change.path);
-      lines.push(`### ${i + 1}. ${kinds[change.kind]} · ${type ? structures[type] : Object.hasOwn(fields, field) ? fields[field] : '条目变化'}`, '', context(change.path, reports), '');
+      lines.push(`### ${i + 1}. ${kinds[change.kind]} · ${P.titleForPath(change.path)}`, '', context(change.path, reports), '');
       for (const [side, label] of [['before', '之前'], ['after', '之后']]) lines.push(`#### ${label}`, '', Object.hasOwn(change, side) ? readableValue(change[side], change.path, reports[side]) : '此侧没有该条目', '');
       lines.push('原始位置标识（用于定位，按顺序读取）：', '', block(JSON.stringify(change.path)), '');
     }
