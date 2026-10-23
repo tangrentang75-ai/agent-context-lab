@@ -1,6 +1,6 @@
 {
   "name": "agent-context-lab",
-  "version": "0.25.18",
+  "version": "0.26.0",
   "private": true,
   "description": "Local workspace for AI task goals, acceptance evidence and resource budgets",
   "license": "MIT",
@@ -22,7 +22,7 @@
   ],
   "scripts": {
     "start": "node server.cjs",
-    "test": "node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs review-planner.test.cjs review-study.test.cjs review-passages.test.cjs passage-study.test.cjs review-bundles.test.cjs bundle-study.test.cjs resource-decision.test.cjs task-ledger.test.cjs task-executor.test.cjs task-execution-api.test.cjs execution-study.test.cjs project-review.test.cjs project-review-api.test.cjs observation-audit.test.cjs observation-plan.test.cjs observation-check.test.cjs project-review-create.test.cjs project-review-ui.test.cjs evidence-file-check.test.cjs project-review-backup.test.cjs start-local.test.cjs observation-audit-ui.test.cjs app-ui.test.cjs evaluate-records.test.cjs compare-record-reports.test.cjs report-comparison-ui.test.cjs report-comparison-markdown.test.cjs",
+    "test": "node --test evaluation.test.cjs bridge.test.cjs context-study.test.cjs retrieval-study.test.cjs evidence-study.test.cjs cost-model.test.cjs scaling-study.test.cjs quality-study.test.cjs codex-response.test.cjs review-planner.test.cjs review-study.test.cjs review-passages.test.cjs passage-study.test.cjs review-bundles.test.cjs bundle-study.test.cjs resource-decision.test.cjs task-ledger.test.cjs task-executor.test.cjs task-execution-api.test.cjs execution-study.test.cjs project-review.test.cjs project-review-api.test.cjs observation-audit.test.cjs observation-plan.test.cjs observation-check.test.cjs project-review-create.test.cjs project-review-ui.test.cjs evidence-file-check.test.cjs project-review-backup.test.cjs start-local.test.cjs observation-audit-ui.test.cjs app-ui.test.cjs evaluate-records.test.cjs compare-record-reports.test.cjs report-comparison-ui.test.cjs report-comparison-markdown.test.cjs file-guide.test.cjs start-ui.test.cjs record-entry.test.cjs",
     "experiment": "node codex-bridge.cjs",
     "study": "node context-study.cjs",
     "retrieval": "node retrieval-study.cjs",

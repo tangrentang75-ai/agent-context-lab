@@ -1,7 +1,7 @@
 'use strict';
 const http=require('node:http'),path=require('node:path'),{spawn}=require('node:child_process');
 const {localIdentity}=require('./local-identity.cjs');
-const url='http://127.0.0.1:4173/project-review.html';
+const url='http://127.0.0.1:4173/start.html';
 function classify(data,expected){
   if(!data||data.schema!=='acl-local-info-v1'||data.app!=='agent-context-lab'||typeof data.version!=='string'||!/^\d+\.\d+\.\d+(?:[-+][a-zA-Z0-9.-]+)?$/.test(data.version)||typeof data.workspaceId!=='string'||!/^[a-f0-9]{64}$/.test(data.workspaceId))return {kind:'unrecognized'};
   if(data.workspaceId!==expected.workspaceId)return {kind:'different-directory'};

@@ -9,7 +9,7 @@
 </head>
 <body>
   <a class="skip" href="#content">跳到检查结果</a>
-  <header class="site-header"><a class="brand" href="/">◈ 任务罗盘</a><nav aria-label="工作台导航"><a href="/">任务工作台</a><a href="decision.html">资源决策</a><a href="ledger.html">执行台账</a><a href="project-review.html" aria-current="page">项目体检</a></nav><span class="local">本机资料</span></header>
+  <header class="site-header"><a class="brand" href="/">◈ 任务罗盘</a><nav aria-label="工作台导航"><a href="start.html" target="_blank" rel="noopener">开始使用 ↗</a><a href="/">任务工作台</a><a href="decision.html">资源决策</a><a href="ledger.html">执行台账</a><a href="project-review.html" aria-current="page">项目体检</a></nav><span class="local">本机资料</span></header>
   <main id="content">
     <input id="evidence-file" type="file" hidden aria-label="选择证据原文件">
     <section class="intro"><div><p class="eyebrow">从“做出来了”到“确实有用”</p><h1>项目下一步，该做什么？</h1><p class="subtitle">先看证据能说明什么，再安排值得投入的工作。</p></div><div class="actions"><button id="create-project" class="primary">开始新项目检查</button><button id="load-local">读取银龄净网最新检查</button><button id="import-review">导入检查记录</button><a class="backup-link" href="#review-backup">备份与恢复</a><input id="review-file" type="file" accept=".json,application/json" hidden></div></section>
@@ -46,7 +46,7 @@
       </details>
     </section>
     <section id="review-backup" tabindex="-1" class="section boundaries" aria-labelledby="backup-title"><h2 id="backup-title">把检查记录带走</h2><p id="saved-count" role="status"></p><p>备份当前浏览器保存的项目检查及历次记录。电脑源文件、仅从本机接口读取的记录、广告观察计划和临时核对结果不在其中。恢复时与现有记录合并；同编号不同内容会整批拒绝。</p><div class="actions"><button id="export-backup" disabled>备份全部已保存检查</button><button id="import-backup">恢复检查备份</button><button id="export-storage-recovery" disabled hidden>下载损坏保存区的排查文件</button><input id="backup-file" type="file" accept=".json,application/json" hidden></div></section>
-    <footer><p>任务罗盘 · 项目体检 v0.25.9<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除全部浏览器存档</button></footer>
+    <footer><p>任务罗盘 · 项目体检 v0.26.0<br>检查资料保存在本机。导入的数据来源由提交者声明。</p><button id="clear-saved" class="quiet">清除全部浏览器存档</button></footer>
   </main>
   <dialog id="remove-dialog" aria-labelledby="remove-title" aria-describedby="remove-description">
     <h2 id="remove-title">只移除这一份浏览器存档？</h2><p id="remove-description"></p>

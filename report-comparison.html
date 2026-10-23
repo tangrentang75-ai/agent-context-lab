@@ -8,13 +8,13 @@
 </head>
 <body>
   <a class="skip" href="#content">跳到主要内容</a>
-  <header><a class="brand" href="/">◈ 任务罗盘</a><nav aria-label="工作台导航"><a href="/">任务工作台</a><a href="project-review.html">项目体检</a><a href="report-comparison.html" aria-current="page">报告对照</a></nav><span class="local">● 浏览器内处理</span></header>
+  <header><a class="brand" href="/">◈ 任务罗盘</a><nav aria-label="工作台导航"><a href="start.html" target="_blank" rel="noopener">开始使用 ↗</a><a href="/">任务工作台</a><a href="project-review.html">项目体检</a><a href="report-comparison.html" aria-current="page">报告对照</a></nav><span class="local">● 浏览器内处理</span></header>
   <main id="content">
     <section class="intro"><div><p class="eyebrow">报告对照 / REVIEW CHANGES</p><h1>这一次，哪里变了？</h1><p class="subtitle">把两份评估放在一起，先核对条件，再逐项查看证据。</p></div><button id="demo" disabled>用示例体验</button></section>
     <p id="notice" class="notice" role="status" aria-live="polite">正在准备本机评价规则…</p><button id="retry" hidden>重新连接本机服务</button>
     <details id="generator" class="generator">
       <summary>还没有评估报告？从任务数据生成</summary>
-      <p>选择首页“保存当前数据”下载的 JSON，设置每条记录的预算，即可生成完整评估报告。只重评已有记录，不启动 AI。</p>
+      <p>选择首页“保存当前数据”或手动录入页下载的任务 JSON，设置每条记录的预算，即可生成完整评估报告。只重评已有记录，不启动 AI。还没有记录时，可<a href="record-entry.html" target="_blank" rel="noopener">用表单填写 ↗</a>。</p>
       <div class="generator-fields"><div><label for="dataset-file">任务数据 · 最大 2MiB</label><input id="dataset-file" type="file" accept=".json,application/json" disabled><p id="dataset-name" class="file-name">尚未选择任务数据</p></div><div><label for="report-budget">每条记录的 token 上限</label><input id="report-budget" type="number" min="0" step="any" value="20000" disabled><p class="fine">不是全部任务的合计额度；0 也是有效预算。</p></div></div>
       <button id="generate" class="primary" disabled>生成评估报告</button><p id="generator-notice" role="status" aria-live="polite">先选择任务数据，再确认预算。</p>
       <div id="generated" class="generated" hidden><h2>评估报告已生成</h2><p id="generated-summary"></p><p id="generated-origin" class="fine"></p><div class="generator-actions"><button id="download-generated" disabled>下载评估报告</button><button id="use-before" disabled>作为“之前”报告</button><button id="use-after" disabled>作为“之后”报告</button></div><p class="fine">修改预算或任务数据后需重新生成。已送入对照区的副本不会跟随修改；新报告需再次送入。</p></div>

@@ -9,6 +9,9 @@ let localDataset = false;
 // New requests and local edits invalidate older asynchronous work.
 let datasetEpoch = 0;
 let runEpoch = 0;
+// Downloads cannot confirm that a file reached disk. Loaded data and actual
+// edits remain protected until an explicit reset; read-only browsing stays clean.
+let sessionDirty = false, reviewDraftDirty = false, budgetDraftDirty = false;
 function preserveSession() { datasetEpoch++; }
 function closeStaleDetail() { if ($('detail-dialog').open) $('detail-dialog').close(); activeRunId=null; }
 const $ = id => document.getElementById(id);
@@ -72,6 +75,7 @@ function selectTask(id) {
   $('compare-task').value = selectedTaskId; renderCompare();
 }
 function renderCompare() {
+  budgetDraftDirty = false;
   const task = currentTask();
   const groups = [...new Set(task.runs.map(r => r.comparisonGroup))];
   const {rows,bestIds} = E.compare(task,budget,selectedGroup);
@@ -92,29 +96,37 @@ function renderCompare() {
   const applyBudget = document.createElement('button');
   applyBudget.className='button full'; applyBudget.textContent='应用预算'; applyBudget.style.marginTop='10px';
   $('budget-input').parentElement.after(applyBudget);
-  const commitBudget = () => {const field=$('budget-input'), n=Number(field.value); if(field.value==='' || !Number.isFinite(n) || n<0 || n>1e9) {toast('请输入 0—1,000,000,000 的预算',true);field.value=budget;return;}preserveSession();budget=n;renderCompare();};
+  const commitBudget = () => {const field=$('budget-input'), n=Number(field.value); if(field.value==='' || !Number.isFinite(n) || n<0 || n>1e9) {toast('请输入 0—1,000,000,000 的预算',true);field.value=budget;budgetDraftDirty=false;return;}preserveSession();if(n!==budget)sessionDirty=true;budget=n;renderCompare();};
   applyBudget.addEventListener('click',commitBudget);
-  $('budget-input').addEventListener('input',preserveSession);
+  $('budget-input').addEventListener('input',()=>{preserveSession();budgetDraftDirty=$('budget-input').value!==String(budget);});
   $('budget-input').addEventListener('keydown',event=>{if(event.key==='Enter')commitBudget();});
   $('group-select').addEventListener('change',event=>{preserveSession();selectedGroup=event.target.value;renderCompare();});
-  $('compare-content').querySelectorAll('[data-weight]').forEach(el=>el.addEventListener('change',()=>{preserveSession();task.goals[Number(el.dataset.weight)].weight=Number(el.value);renderOverview();renderCompare();}));
-  $('compare-content').querySelectorAll('[data-required]').forEach(el=>el.addEventListener('change',()=>{preserveSession();task.goals[Number(el.dataset.required)].required=el.checked;renderOverview();renderCompare();}));
+  $('compare-content').querySelectorAll('[data-weight]').forEach(el=>el.addEventListener('change',()=>{preserveSession();const goal=task.goals[Number(el.dataset.weight)],weight=Number(el.value);if(goal.weight!==weight)sessionDirty=true;goal.weight=weight;renderOverview();renderCompare();}));
+  $('compare-content').querySelectorAll('[data-required]').forEach(el=>el.addEventListener('change',()=>{preserveSession();const goal=task.goals[Number(el.dataset.required)];if(goal.required!==el.checked)sessionDirty=true;goal.required=el.checked;renderOverview();renderCompare();}));
   $('compare-content').querySelectorAll('[data-run]').forEach(el=>el.addEventListener('click',()=>showDetail(el.dataset.run)));
   $('export-report').addEventListener('click',()=>{showReport({reportVersion:1,generatedAt:new Date().toISOString(),demo:dataset.demo,scope:'离线记录评估；非在线智能体控制；不代表因果关系或真实提升',budgetTokens:budget,comparisonGroup:selectedGroup,task:structuredClone(task),results:rows.map(x=>({runId:x.run.id,...x.evaluation})),lowestTokenEligibleRunIds:bestIds});});
 }
 function showDetail(id) {
   preserveSession();
+  reviewDraftDirty = false;
   const task = currentTask(), run = task.runs.find(r=>r.id===id); activeRunId=id;
   $('detail-content').innerHTML = `<header class="dialog-header"><div><p class="eyebrow">EXECUTION REVIEW</p><h2>${escapeHTML(run.strategy)}</h2><p>${escapeHTML(task.title)} · ${dataset.demo?'人工构造示例':localDataset?'本机真实执行':'导入记录'}</p></div><button id="close-dialog" class="icon-button" aria-label="关闭详情">×</button></header><div class="detail-grid"><section><h3>执行时间线</h3><p class="muted">过程记录用于复核，不代表模型内部思维。</p><ol class="timeline">${run.events.length?run.events.map(e=>`<li><span class="timeline-dot ${e.type}"></span><div class="event-top"><strong>${escapeHTML(e.label)}</strong><small>${number(e.atSec)} 秒 · ${typeLabel[e.type]}</small></div><p>${escapeHTML(e.detail)}</p></li>`).join(''):'<li>没有提供过程记录。</li>'}</ol></section><section class="evidence-section"><h3>验收证据</h3><p class="muted">可以人工复核并修正；变更在当前页面内存中保留。</p><form id="review-form">${task.goals.map((g,i)=>`<div class="evidence-item"><label for="evidence-${i}">${escapeHTML(g.label)} ${g.required?'<small>必需</small>':''}</label><select aria-label="${escapeHTML(g.label)}的验收状态" name="status-${i}">${['pass','fail','unknown'].map(s=>`<option value="${s}" ${run.checks[g.id].status===s?'selected':''}>${statusLabel[s]}</option>`).join('')}</select><textarea id="evidence-${i}" name="evidence-${i}" maxlength="6000" rows="3" placeholder="填写可追溯的验收依据">${escapeHTML(run.checks[g.id].evidence)}</textarea></div>`).join('')}<button class="button primary full" type="submit">保存本次复核</button></form></section></div>`;
   $('close-dialog').addEventListener('click',()=>$('detail-dialog').close());
-  $('review-form').addEventListener('input',preserveSession);
-  $('review-form').addEventListener('change',preserveSession);
+  const reviewEdited = event => {
+    preserveSession();
+    if(currentTask()!==task || !task.runs.includes(run) || !$('detail-dialog').open)return;
+    const form=new FormData(event.currentTarget || $('review-form'));
+    reviewDraftDirty=task.goals.some((goal,i)=>form.get(`status-${i}`)!==run.checks[goal.id].status || form.get(`evidence-${i}`)!==run.checks[goal.id].evidence);
+  };
+  $('review-form').addEventListener('input',reviewEdited);
+  $('review-form').addEventListener('change',reviewEdited);
   $('review-form').addEventListener('submit',event=>{
     event.preventDefault();
     if(currentTask()!==task || !task.runs.includes(run)){toast('记录已切换，请重新打开当前记录复核',true);return;}
     preserveSession(); const form = new FormData(event.target), updates=Object.create(null);
     for(let i=0;i<task.goals.length;i++) {const status=form.get(`status-${i}`), evidence=form.get(`evidence-${i}`).trim();if(status!=='unknown'&&!evidence){toast('判定通过或未通过时，请补充验收证据',true);return;}updates[task.goals[i].id]={status,evidence};}
-    run.checks=updates;renderOverview();renderCompare();$('detail-dialog').close();toast('复核已更新到当前会话；请点“保存当前数据”下载留存，下次可重新导入');
+    if(task.goals.some(goal=>updates[goal.id].status!==run.checks[goal.id].status || updates[goal.id].evidence!==run.checks[goal.id].evidence))sessionDirty=true;
+    run.checks=updates;reviewDraftDirty=false;renderOverview();renderCompare();$('detail-dialog').close();toast('复核已更新到当前会话；请点“保存当前数据”下载留存，下次可重新导入');
   });
   $('detail-dialog').showModal();
 }
@@ -149,13 +161,18 @@ $('save-dataset').addEventListener('click',()=>{
     toast('已发起整份数据下载，请确认文件已保存；下次用“导入记录”继续。预算与筛选不包含在文件中');
   } catch(error) { toast(`未能保存：${error.message}`,true); }
 });
-$('reset-button').addEventListener('click',()=>{if(!confirm('恢复内置示例会清除本页导入记录和复核修改。需要保留的数据请先导出报告。确认恢复？'))return;preserveSession();closeStaleDetail();dataset=structuredClone(AGENT_SAMPLE);localDataset=false;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;budget=10000;$('search').value='';$('scenario-filter').value='all';renderAll();toast('已恢复内置演示数据');});
+$('reset-button').addEventListener('click',()=>{if(!confirm('恢复内置示例会清除本页导入记录和复核修改。需要保留的数据请先导出报告。确认恢复？'))return;preserveSession();closeStaleDetail();dataset=structuredClone(AGENT_SAMPLE);localDataset=false;selectedTaskId=dataset.tasks[0].id;selectedGroup=dataset.tasks[0].runs[0].comparisonGroup;budget=10000;$('search').value='';$('scenario-filter').value='all';renderAll();sessionDirty=false;reviewDraftDirty=false;toast('已恢复内置演示数据');});
 document.querySelectorAll('.sidebar a[href^="#"], .inline-link[href^="#"]').forEach(link=>link.addEventListener('click',()=>window.scrollTo({top:0,left:0,behavior:'instant'})));
+$('detail-dialog').addEventListener('close',()=>{reviewDraftDirty=false;});
+window.addEventListener('beforeunload',event=>{
+  if(!sessionDirty && !reviewDraftDirty && !budgetDraftDirty)return;
+  event.preventDefault();event.returnValue='';
+});
 window.addEventListener('hashchange',route);renderAll();
 
 function replaceDataset(data,isLocal) {
   const next=E.validateDataset(data);
-  const previous={dataset,localDataset,selectedTaskId,selectedGroup,budget,
+  const previous={dataset,localDataset,selectedTaskId,selectedGroup,budget,budgetDraftDirty,
     search:$('search').value,filter:$('scenario-filter').value,budgetDraft:$('budget-input').value,
     hash:location.hash,connection:$('connection-status').textContent};
   try {
@@ -174,10 +191,11 @@ function replaceDataset(data,isLocal) {
     ({dataset,localDataset,selectedTaskId,selectedGroup,budget}=previous);
     $('search').value=previous.search;$('scenario-filter').value=previous.filter;
     location.hash=previous.hash;$('connection-status').textContent=previous.connection;
-    renderAll();$('budget-input').value=previous.budgetDraft;
+    renderAll();$('budget-input').value=previous.budgetDraft;budgetDraftDirty=previous.budgetDraftDirty;
     throw new Error('记录无法完整显示，已保留原有数据。请检查实验汇总或用量字段。',{cause:error});
   }
   closeStaleDetail();
+  sessionDirty=true;reviewDraftDirty=false;
 }
 function showLive(data) { replaceDataset(data,true); }
 async function loadRecords(url,onLoaded=()=>{}) {

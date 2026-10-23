@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="从自己的目标开始：检查项目、录入 AI 任务记录，或找回已有文件的正确入口。">
+  <title>开始使用 · 任务罗盘</title>
+  <link rel="stylesheet" href="start.css">
+  <script defer src="file-guide.js"></script><script defer src="start-ui.js"></script>
+</head>
+<body>
+  <a class="skip" href="#content">跳到主要内容</a>
+  <header><a class="brand" href="start.html" aria-current="page"><span aria-hidden="true">◈</span> 任务罗盘</a><nav aria-label="工作台导航"><a href="/" target="_blank" rel="noopener">任务工作台 ↗</a><a href="project-review.html" target="_blank" rel="noopener">项目体检 ↗</a><a href="report-comparison.html" target="_blank" rel="noopener">报告对照 ↗</a></nav><span class="local">本机使用 · 无需 AI 密钥</span></header>
+  <main id="content">
+    <section class="intro"><p class="eyebrow">从这里开始 / GET STARTED</p><h1>先选一件你想做的事。</h1><p class="subtitle">写清想要的结果，留下判断的依据，再决定下一步投入在哪里。</p><p class="quiet">工具入口在新标签页打开，方便保留当前页面。已有工作请先导出；打开入口不会替你转移数据。</p></section>
+    <section class="routes" aria-label="选择使用路线">
+      <article class="route"><span class="number">01 / 检查项目</span><h2>我的项目，还差什么？</h2><p>适合课程设计、大创或个人项目。先建一张能检查的目标清单。</p><ol><li>写项目名称与具体目标</li><li>按目标补充检查材料</li><li>保存每轮检查与下一步待办</li></ol><a class="button primary" href="project-review.html" target="_blank" rel="noopener">开始项目检查 ↗</a><p class="fine">到达后点击“开始新项目检查”。暂时没材料，也可以先建清单。</p></article>
+      <article class="route"><span class="number">02 / 比较 AI 记录</span><h2>AI 做得怎样，投入多少？</h2><p>把已经完成的 AI 任务填进表单，逐项记录依据和实际用量。</p><ol><li>确定同一任务的目标</li><li>填写执行记录与验收依据</li><li>下载数据，在工作台比较</li></ol><a class="button primary" href="record-entry.html" target="_blank" rel="noopener">填写我的任务记录 ↗</a><p class="fine">不需要写 JSON。没有用量就留空；这一步不会启动 AI。</p></article>
+      <article class="route"><span class="number">03 / 继续已有文件</span><h2>手里有文件，该在哪打开？</h2><p>任务数据、检查备份和评估报告用途不同。先辨认，再去对应入口。</p><ol><li>选择已保存的 JSON 文件</li><li>查看类型和使用步骤</li><li>到目标页面重新选择文件</li></ol><a class="button" href="#file-help">识别文件用途 ↓</a><p class="fine">只在浏览器内读取。不会修改、上传或自动导入你的文件。</p></article>
+    </section>
+    <section class="file-panel" id="file-help" aria-labelledby="file-heading"><div class="section-heading"><div><p class="eyebrow">继续上次的工作</p><h2 id="file-heading">这份 JSON 应该放在哪里？</h2><p>最多 16MiB，仅识别格式与入口。目标页面仍会检查完整内容。</p></div><span class="tag">本地文件指引</span></div>
+      <label for="guide-file">选择已有 JSON 文件</label><div class="file-actions"><input id="guide-file" type="file" accept=".json,application/json"><button id="clear-file" type="button">清空选择</button></div>
+      <p id="file-notice" role="status" aria-live="polite">选择文件后显示用途；不会自动替换任何工作台的数据。</p>
+      <section id="file-result" class="file-result" aria-labelledby="file-title" hidden><h3 id="file-title"></h3><p id="file-description"></p><ol id="file-steps"></ol><div id="file-destinations" class="destination-links"></div><p id="file-note" class="fine"></p></section>
+    </section>
+    <section class="walkthrough" aria-labelledby="try-heading"><div><p class="eyebrow">先花五分钟，熟悉一次流程</p><h2 id="try-heading">还没有自己的记录？</h2><p>用内置虚构任务练习。它们展示失败、证据缺失和不同用量，不代表真实模型表现。</p><a class="button" href="/#compare" target="_blank" rel="noopener">打开工作台体验 ↗</a><p class="fine">新打开的工作台默认载入示例。不会重置其他已打开的页面。</p></div><ol class="steps"><li><strong>看同一任务的几条记录</strong><span>先看必需目标和依据，再看 token；低用量也可能没有完成任务。</span></li><li><strong>查看证据，尝试调整预算</strong><span>观察候选记录为何变化。只重新评估现有记录，不调用模型。</span></li><li><strong>保存数据，再生成报告</strong><span>点击“保存当前数据”，到“报告对照 → 从任务数据生成”重新选择下载的文件。</span></li><li><strong>改一个条件，再做一次对照</strong><span>保留第一份报告，修改预算生成第二份；对照会提示条件变化，不能据此声称 AI 进步了。</span></li></ol></section>
+    <section class="storage" aria-labelledby="save-heading"><h2 id="save-heading">离开前，保存对的那份文件。</h2><div class="storage-grid"><p><strong>任务工作台与手动录入</strong><span>内容留在当前页面内存。下载完整任务数据，之后重新导入；离页提醒不等于已经保存。</span></p><p><strong>项目体检</strong><span>新建和导入记录可保存在当前浏览器。重要更新后导出检查数据或整批备份，换浏览器前尤其需要。</span></p><p><strong>报告对照</strong><span>下载原始评估报告和对照结果。对照结果仅供阅读，重新比较仍需要两份原始报告。</span></p></div></section>
+    <footer>任务罗盘 · 本机网页工具<span>本机地址只在这台电脑可用。代码测试通过，不等于已完成真实用户试用。</span></footer>
+  </main>
+</body>
+</html>

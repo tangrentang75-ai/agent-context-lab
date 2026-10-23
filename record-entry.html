@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>录入已有记录 · 任务罗盘</title>
+  <link rel="stylesheet" href="record-entry.css">
+  <script defer src="evaluation.js"></script><script defer src="record-entry-core.js"></script><script defer src="record-entry.js"></script>
+</head>
+<body>
+  <a class="skip" href="#content">跳到主要内容</a>
+  <header><a class="brand" href="/" target="_blank" rel="noopener">◈ 任务罗盘</a><nav aria-label="工作台导航"><a href="/" target="_blank" rel="noopener">任务工作台 ↗</a><a href="report-comparison.html#generator" target="_blank" rel="noopener">报告生成与对照 ↗</a><a href="record-entry.html" aria-current="page">录入已有记录</a></nav><span class="local">● 浏览器内处理</span></header>
+  <main id="content">
+    <section class="intro"><p class="eyebrow">已有记录 / RECORD ENTRY</p><h1>把已有执行结果，整理成可复核的记录。</h1><p class="subtitle">先定义一个任务的验收目标，再填写不同策略的实际执行结果。不需要手写 JSON。</p></section>
+    <p class="notice">本页不执行 AI、不上传、不自动保存。只填写你实际掌握的模型、策略、用量与证据；未知用量留空，未知状态保留“待核验”。</p>
+    <form id="entry-form" novalidate>
+      <section class="card" aria-labelledby="task-heading"><div class="section-heading"><div><p class="step">01 / 任务与目标</p><h2 id="task-heading">什么结果算完成？</h2></div><span id="goal-count" class="badge">1 / 20 项目标</span></div>
+        <div class="task-fields"><label>任务名称 <span>必填</span><input id="task-title" maxlength="3000" placeholder="例如：修复导出功能" required></label><label>任务类型<select id="task-scenario"><option value="coding">软件开发</option><option value="research">资料研究</option><option value="data">数据处理</option></select></label></div>
+        <label>任务要求与输入范围 <span>必填，最多 3000 字符</span><textarea id="task-description" rows="3" maxlength="3000" placeholder="写清要完成什么、使用哪些输入，以及验收范围。" required></textarea></label>
+        <p class="fine">每个目标应能独立核验。权重影响得分；必需项未通过或待核验时，不满足验收条件。</p>
+        <div id="goals"></div>
+        <div class="actions"><button id="add-goal" type="button">＋ 添加目标</button><button id="lock-goals" type="button" class="primary">锁定任务与目标，填写记录</button><button id="edit-goals" type="button" hidden>修改任务与目标</button></div>
+        <p id="goal-notice" class="fine" role="status">支持 1—20 项目标。锁定后可返回修改；修改任务名称、范围或类型会使全部验收状态回到待核验，证据保留。</p>
+      </section>
+      <section class="card" aria-labelledby="runs-heading"><div class="section-heading"><div><p class="step">02 / 实际执行记录</p><h2 id="runs-heading">每次执行，分别记录。</h2></div><span id="run-count" class="badge">0 / 30 条记录</span></div>
+        <p class="fine">条件组是你声明的可比范围。输入、模型或版本、工具和环境有变化时，应使用不同条件组。模型、策略、条件组均需填写；未知内容可明确写“未知”，不要猜测。</p>
+        <p id="runs-empty" class="empty">先锁定任务与目标，再添加执行记录。已经填写的记录会在修改任务或目标时保留。</p><div id="runs"></div>
+        <button id="add-run" type="button" disabled>＋ 添加一条执行记录</button>
+      </section>
+      <section class="card export-card" aria-labelledby="export-heading"><p class="step">03 / 校验与导出</p><h2 id="export-heading">保存为首页可读取的任务数据</h2>
+        <div class="budget-row"><label>本页复核：每条记录的 token 上限<input id="entry-budget" type="text" inputmode="decimal" value="20000" maxlength="100"></label><p class="fine">预算只用于下方复核，不写入任务数据。0 是有效预算；到首页或报告生成器后需重新设置。</p></div>
+        <p class="fine">导出标记 demo: false 仅表示由你录入；来源、条件组与证据真实性由提供者自行声明，本页不独立核实。未填写事件时间线，不会生成推测的操作日志。</p>
+        <div class="actions"><button id="validate" type="button" disabled>校验并复核</button><button id="download" type="submit" class="primary" disabled>下载任务数据 JSON</button></div>
+        <p id="entry-notice" class="notice" role="status" aria-live="polite">完成至少一条记录后可校验和下载。通过 / 未通过必须附有证据。</p>
+        <div id="review" hidden><h3>当前填写内容的复核</h3><p id="review-summary"></p><div id="review-rows"></div></div>
+        <div class="next-step"><h3>下载后怎么用？</h3><p>文件可导入首页，或交给报告生成器生成完整评估报告。新页面不会自动接收填写内容，请再次选择刚下载的文件。</p><div class="links"><a href="/" target="_blank" rel="noopener">打开首页，导入任务数据 ↗</a><a href="report-comparison.html#generator" target="_blank" rel="noopener">打开报告生成器 ↗</a></div></div>
+        <p class="fine">最多 1 个任务、20 项目标、30 条记录，文件最大 2MiB。下载保留本页内容；有输入修改时，会请求浏览器离页提醒；提醒不能代替确认下载。分享前请检查证据中的私人信息。</p>
+      </section>
+    </form>
+    <footer>任务罗盘 · 录入已有记录<span>未知不等于通过，填写不等于验证。</span></footer>
+    <noscript>本页需要启用 JavaScript 才能录入和下载任务数据。</noscript>
+  </main>
+</body>
+</html>

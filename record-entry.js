@@ -1,0 +1,201 @@
+(function () {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const E = window.AgentEvaluation;
+  const B = window.AgentRecordEntry.createEntryBuilder({ evaluation: E });
+  const taskId = `task-${typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')}`;
+  const draft = { id: taskId, title: '', description: '', scenario: 'coding', goals: [{ id: 'g1', label: '', weight: 3, required: true }], runs: [] };
+  let goalSequence = 1, runSequence = 0, locked = false, dirty = false, lockedGoals = [], lockedTask = null;
+  const runViews = new Map();
+  function node(tag, className, content) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (content !== undefined) element.textContent = content;
+    return element;
+  }
+  function say(message, error = false) {
+    $('entry-notice').textContent = message;
+    $('entry-notice').classList.toggle('error', error);
+  }
+  function changed() {
+    dirty = true;
+    $('review').hidden = true;
+    say('内容已修改。下载前会重新校验；刷新或关闭前请保存任务数据。');
+  }
+  function bind(input, object, key, after) {
+    const update = () => {
+      const value = input.type === 'checkbox' ? input.checked : input.value;
+      if (String(object[key]) === String(value)) return;
+      object[key] = value;
+      changed();
+      if (after) after();
+    };
+    input.addEventListener('input', update);
+    input.addEventListener('change', update);
+  }
+  function textInput(value, max, placeholder) {
+    const input = node('input'); input.type = 'text'; input.maxLength = max;
+    input.value = value ?? ''; if (placeholder) input.placeholder = placeholder;
+    return input;
+  }
+  function field(labelText, input, hint) {
+    const label = node('label', '', labelText);
+    if (hint) label.append(node('span', '', hint));
+    label.append(input);
+    return label;
+  }
+  function select(options, value) {
+    const input = node('select');
+    options.forEach(([id, label]) => { const option = node('option', '', label); option.value = id; input.append(option); });
+    input.value = value;
+    return input;
+  }
+  function syncControls() {
+    $('goal-count').textContent = `${draft.goals.length} / 20 项目标`;
+    $('run-count').textContent = `${draft.runs.length} / 30 条记录`;
+    $('add-goal').disabled = locked || draft.goals.length >= 20;
+    $('lock-goals').hidden = locked;
+    $('edit-goals').hidden = !locked;
+    ['task-title', 'task-description', 'task-scenario'].forEach(id => { $(id).disabled = locked; });
+    $('add-run').disabled = !locked || draft.runs.length >= 30;
+    $('validate').disabled = $('download').disabled = !locked || !draft.runs.length;
+    $('runs-empty').hidden = draft.runs.length > 0;
+  }
+  function renderGoals() {
+    $('goals').replaceChildren();
+    draft.goals.forEach((goal, index) => {
+      const row = node('div', 'goal');
+      const labelInput = textInput(goal.label, 300, '例如：现有测试全部通过');
+      labelInput.required = true; labelInput.disabled = locked;
+      const goalField = field(`目标 ${index + 1}`, labelInput, '最多 300 字符'); goalField.className = 'goal-title';
+      const weight = select([1, 2, 3, 4, 5].map(n => [String(n), String(n)]), goal.weight); weight.disabled = locked;
+      const required = node('input'); required.type = 'checkbox'; required.checked = goal.required; required.disabled = locked;
+      const requiredLabel = node('label', 'required'); requiredLabel.append(required, document.createTextNode('必需项'));
+      const remove = node('button', 'remove', '删除目标'); remove.type = 'button';
+      remove.disabled = locked || draft.goals.length === 1 || draft.runs.length > 0;
+      remove.title = draft.runs.length ? '已有记录时保留所有目标，避免丢失验收证据' : '至少保留一项目标';
+      remove.addEventListener('click', () => {
+        if (goal.label.trim() && !window.confirm('删除这项目标？该操作只影响尚未录入记录的目标列表。')) return;
+        draft.goals = draft.goals.filter(item => item.id !== goal.id); changed(); renderGoals(); syncControls();
+      });
+      bind(labelInput, goal, 'label'); bind(weight, goal, 'weight'); bind(required, goal, 'required');
+      row.append(goalField, field('权重', weight), requiredLabel, remove); $('goals').append(row);
+    });
+  }
+  function updateSummary(run) {
+    const view = runViews.get(run.id); if (!view) return;
+    const index = draft.runs.indexOf(run) + 1;
+    view.title.textContent = `记录 ${index} · ${run.strategy.trim() || '策略未填写'} · ${run.model.trim() || '模型未填写'}`;
+    const known = Object.values(run.checks).filter(check => check.status !== 'unknown').length;
+    const passed = Object.values(run.checks).filter(check => check.status === 'pass').length;
+    view.metrics.textContent = `条件组：${run.comparisonGroup.trim() || '未填写'}  ·  token：${String(run.tokens).trim() || '未知'}  ·  耗时：${String(run.durationSec).trim() ? `${run.durationSec} 秒` : '未知'}  ·  已选择判定 ${known}/${draft.goals.length}，选为通过 ${passed}（填写草稿）`;
+  }
+  function renderRuns() {
+    runViews.clear(); $('runs').replaceChildren();
+    draft.runs.forEach(run => {
+      const details = node('details', 'run'); details.open = run.open !== false;
+      details.addEventListener('toggle', () => { run.open = details.open; });
+      const summary = node('summary'); const title = node('span', 'run-label'); const metrics = node('span', 'run-metrics');
+      summary.append(title, metrics); details.append(summary);
+      runViews.set(run.id, { title, metrics, details });
+      const body = node('div', 'run-body');
+      if (!locked) body.append(node('p', 'review-warning', '正在修改任务与目标。记录内容已保留，重新锁定后可继续填写；任务信息改动会复位全部验收状态，目标改动会复位对应状态，证据文字保留。'));
+      if (run.needsReview) body.append(node('p', 'review-warning', '此记录的任务或目标定义曾调整，旧证据已保留；下方显示当前填写的状态。'));
+      const fields = node('fieldset', 'run-fields'); fields.disabled = !locked;
+      const meta = node('div', 'run-meta');
+      [['strategy', '策略名称', '填写实际使用的策略'], ['model', '模型与版本', '例如：实际执行日志中的模型标识'], ['comparisonGroup', '条件组', '相同输入、模型、工具与环境使用同一标识']].forEach(([key, label, placeholder]) => {
+        const input = textInput(run[key], 300, placeholder); input.required = true;
+        bind(input, run, key, () => updateSummary(run));
+        const labelNode = field(label, input, '必填，最多 300 字符'); if (key === 'comparisonGroup') labelNode.className = 'run-group'; meta.append(labelNode);
+      });
+      [['tokens', '总 token 用量', '未知留空；实际为 0 时填 0'], ['durationSec', '总耗时（秒）', '未知留空；可填写小数']].forEach(([key, label, hint]) => {
+        const input = textInput(run[key], 100, '未知'); input.inputMode = 'decimal';
+        bind(input, run, key, () => updateSummary(run)); meta.append(field(label, input, hint));
+      });
+      fields.append(meta);
+      const checks = node('div', 'checks');
+      draft.goals.forEach((goal, index) => {
+        const check = run.checks[goal.id];
+        const row = node('div', 'check'); row.append(node('h3', '', `${index + 1}. ${goal.label} · ${goal.required ? '必需项' : '可选项'} · 权重 ${goal.weight}`));
+        const status = select([['unknown', '待核验'], ['pass', '通过'], ['fail', '未通过']], check.status);
+        const evidence = node('textarea'); evidence.rows = 3; evidence.maxLength = 6000; evidence.value = check.evidence; evidence.placeholder = '粘贴实际验收结果、日志摘录、输出片段或可查证的位置。';
+        const statusLabel = field('当前状态', status); statusLabel.className = 'status-label';
+        bind(status, check, 'status', () => updateSummary(run)); bind(evidence, check, 'evidence');
+        row.append(statusLabel, field('验收证据', evidence, '通过 / 未通过时必填；最多 6000 字符')); checks.append(row);
+      });
+      fields.append(checks);
+      const actions = node('div', 'run-actions'); const remove = node('button', 'remove', '删除这条记录'); remove.type = 'button';
+      remove.addEventListener('click', () => {
+        if (!window.confirm('删除这条执行记录及其全部证据？其他记录会保留。')) return;
+        draft.runs = draft.runs.filter(item => item.id !== run.id); changed(); renderRuns(); renderGoals(); syncControls();
+      });
+      actions.append(remove); fields.append(actions); body.append(fields); details.append(body); $('runs').append(details); updateSummary(run);
+    });
+  }
+  function addRun() {
+    if (!locked || draft.runs.length >= 30) return;
+    const run = { id: `${taskId}-run-${++runSequence}`, strategy: '', model: '', comparisonGroup: '', tokens: '', durationSec: '', checks: Object.fromEntries(draft.goals.map(goal => [goal.id, { status: 'unknown', evidence: '' }])), open: true };
+    draft.runs.push(run); changed(); renderRuns(); renderGoals(); syncControls();
+    runViews.get(run.id).details.querySelector('input').focus();
+  }
+  function validate() {
+    if (!locked) throw new Error('请先重新锁定任务与目标，复核相关状态后再导出');
+    const budget = B.parseBudget($('entry-budget').value);
+    const result = B.serializeDataset(draft);
+    const task = result.dataset.tasks[0];
+    $('review-rows').replaceChildren();
+    task.runs.forEach((run, index) => {
+      const evaluation = E.evaluate(task, run, budget);
+      $('review-rows').append(node('p', 'review-row', `记录 ${index + 1} · ${run.strategy} / ${run.model} · ${evaluation.status} · 目标得分 ${evaluation.score}% · 已核验 ${evaluation.known}/${evaluation.total} · ${evaluation.eligible ? '满足候选条件' : '暂不满足候选条件'}`));
+    });
+    $('review-summary').textContent = `1 个任务 · ${task.goals.length} 项目标 · ${task.runs.length} 条记录 · ${(result.bytes / 1024).toFixed(1)}KiB / 2MiB · 每条记录预算 ${budget} token。状态依据你填写的证据，不代表独立核验。`;
+    $('review').hidden = false;
+    return result;
+  }
+  bind($('task-title'), draft, 'title'); bind($('task-description'), draft, 'description'); bind($('task-scenario'), draft, 'scenario');
+  let currentBudget = $('entry-budget').value;
+  $('entry-budget').addEventListener('input', () => { if (currentBudget !== $('entry-budget').value) { currentBudget = $('entry-budget').value; changed(); } });
+  $('add-goal').addEventListener('click', () => {
+    if (locked || draft.goals.length >= 20) return;
+    draft.goals.push({ id: `g${++goalSequence}`, label: '', weight: 3, required: true }); changed(); renderGoals(); syncControls();
+    $('goals').lastElementChild.querySelector('input').focus();
+  });
+  $('lock-goals').addEventListener('click', () => {
+    try {
+      const nextTask = B.normalizeTask(draft);
+      const taskChanged = lockedTask !== null && JSON.stringify(nextTask) !== JSON.stringify(lockedTask);
+      const nextGoals = B.normalizeGoals(draft.goals);
+      const update = B.updateGoalChecks(lockedGoals, nextGoals, draft.runs, { resetAll: taskChanged });
+      draft.goals = nextGoals; draft.runs = update.runs;
+      if (update.resetCount) draft.runs.forEach(run => { run.needsReview = true; });
+      lockedGoals = nextGoals.map(goal => ({ ...goal })); lockedTask = nextTask; locked = true;
+      $('goal-notice').textContent = update.resetCount ? `${taskChanged ? '任务信息已更新' : '目标已更新'}：${update.resetCount} 个目标验收状态回到待核验，原证据文字保留，请重新复核。` : '任务与目标已锁定。已有记录时可修改或追加目标，不能删除目标；修改任务信息会复位全部状态，修改目标只复位对应状态，证据保留。';
+      renderGoals(); renderRuns(); syncControls();
+      if (!draft.runs.length) addRun();
+      say(update.resetCount ? '任务或目标已调整，相关状态已回到待核验；请逐条复核保留的证据。' : '任务与目标已锁定，可以填写实际执行记录。');
+    } catch (error) { $('goal-notice').textContent = error.message; say(error.message, true); }
+  });
+  $('edit-goals').addEventListener('click', () => {
+    locked = false; $('review').hidden = true;
+    $('goal-notice').textContent = '修改后请重新锁定。任务信息改动会复位全部验收状态，目标改动只复位对应状态，原证据文字保留；已有记录时不允许删除目标。';
+    renderGoals(); renderRuns(); syncControls(); $('goals').querySelector('input').focus();
+  });
+  $('add-run').addEventListener('click', addRun);
+  $('validate').addEventListener('click', () => {
+    try { validate(); say('数据格式校验通过。请查看下方复核结果；待核验和成本未知仍可保存，不会被当作通过。'); }
+    catch (error) { $('review').hidden = true; say(error.message, true); }
+  });
+  $('entry-form').addEventListener('submit', event => {
+    event.preventDefault();
+    try {
+      const result = validate();
+      const blob = new Blob([result.json], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob); const anchor = node('a'); anchor.href = url;
+      anchor.download = `agent-records-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+      document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      say('已发起任务数据下载，填写内容仍保留。请确认文件已保存；到首页或报告生成器后，再次选择刚下载的文件。');
+    } catch (error) { $('review').hidden = true; say(error.message, true); }
+  });
+  window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
+  renderGoals(); syncControls();
+})();

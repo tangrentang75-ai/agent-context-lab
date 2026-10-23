@@ -5,12 +5,23 @@ const fresh=title=>{const data=structuredClone(globalThis.AGENT_SAMPLE);data.tas
 function deferred(){let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};}
 // Minimal DOM event doubles run the real app handlers; no browser or model calls.
 function harness(){
-  const nodes=new Map(),requests=[],intervals=[],downloads=[];
+  const nodes=new Map(),requests=[],intervals=[],downloads=[],windowListeners={};
+  const decode=value=>value.replace(/&(?:amp|lt|gt|quot|#39);/g,entity=>({'&amp;':'&','&lt;':'<','&gt;':'>','&quot;':'"','&#39;':"'"}[entity]));
   class Element{
     constructor(){this.listeners={};this.value='';this.dataset={};this.style={};this.parentElement={after(){}};this.open=false;this._html='';this.textContent='';this.children=[];}
-    addEventListener(type,fn){(this.listeners[type]??=[]).push(fn);}async emit(type,event={target:this}){for(const fn of this.listeners[type]||[])await fn(event);}
-    click(){return this.emit('click');}showModal(){this.open=true;}close(){this.open=false;}scrollIntoView(){}append(...nodes){this.children.push(...nodes);}remove(){}
-    set innerHTML(v){this._html=v;this.controls=new Map();for(const m of v.matchAll(/\bid="([^"]+)"/g))nodes.set(m[1],new Element());}
+    addEventListener(type,fn){(this.listeners[type]??=[]).push(fn);}async emit(type,event={target:this}){event.currentTarget=this;for(const fn of this.listeners[type]||[])await fn(event);}
+    click(){return this.emit('click');}showModal(){this.open=true;}close(){if(!this.open)return;this.open=false;for(const fn of this.listeners.close||[])fn({target:this,currentTarget:this});}scrollIntoView(){}append(...nodes){this.children.push(...nodes);}remove(){}
+    set innerHTML(v){
+      this._html=v;this.controls=new Map();for(const m of v.matchAll(/\bid="([^"]+)"/g))nodes.set(m[1],new Element());
+      for(const form of v.matchAll(/<form\b[^>]*id="([^"]+)"[^>]*>([\s\S]*?)<\/form>/g)){
+        const fields=nodes.get(form[1]).fields={};
+        for(const select of form[2].matchAll(/<select\b[^>]*name="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g)){
+          const options=[...select[2].matchAll(/<option\b[^>]*value="([^"]+)"([^>]*)>/g)];
+          const chosen=options.find(option=>/\bselected\b/.test(option[2]))||options[0];fields[select[1]]=decode(chosen[1]);
+        }
+        for(const textarea of form[2].matchAll(/<textarea\b[^>]*name="([^"]+)"[^>]*>([\s\S]*?)<\/textarea>/g))fields[textarea[1]]=decode(textarea[2]);
+      }
+    }
     get innerHTML(){return this._html;}
     insertAdjacentHTML(position,value){this._html=position==='afterbegin'?value+this._html:this._html+value;}
     querySelectorAll(selector){
@@ -24,13 +35,14 @@ function harness(){
   get('scenario-filter').value='all';get('run-live').disabled=true;get('load-live').disabled=true;
   const context={AgentEvaluation:E,AGENT_SAMPLE:globalThis.AGENT_SAMPLE,structuredClone,Blob,URL:{createObjectURL:blob=>{downloads.push(blob);return 'blob:test';},revokeObjectURL(){}},console,
     document:{getElementById:get,createElement:()=>new Element(),querySelectorAll:()=>[],body:{dataset:{},append(){}}},
-    window:{addEventListener(){},scrollTo(){}},location:{hash:''},confirm:()=>true,
+    window:{addEventListener(type,fn){(windowListeners[type]??=[]).push(fn);},scrollTo(){}},location:{hash:''},confirm:()=>true,
     FormData:class{constructor(target){this.fields=target.fields;}get(key){return this.fields[key];}},
     setTimeout:()=>0,clearTimeout(){},setInterval:fn=>{intervals.push(fn);return intervals.length;},clearInterval(){},
     fetch:(url,options)=>{const d=deferred();requests.push({url,options,...d});return d.promise;}};
   vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('./app.js'),'utf8'),context);
   const read=expr=>vm.runInContext(expr,context);
   return {get,requests,intervals,downloads,read,
+    beforeUnload(){const event={prevented:false,returnValue:undefined,preventDefault(){this.prevented=true;}};for(const fn of windowListeners.beforeunload||[])fn(event);return event;},
     import(file){get('file-input').files=[file];get('file-input').value='selected';return get('file-input').emit('change');},
     respond(index,data,ok=true){requests[index].resolve({ok,json:async()=>data});},
     control(name){return get('compare-content').querySelectorAll(`[data-${name}]`)[0];}};
@@ -38,6 +50,7 @@ function harness(){
 const file=data=>({size:100,text:async()=>JSON.stringify(data)});
 const slowFile=d=>({size:100,text:()=>d.promise});
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+const assertUnload=(h,expected)=>{const event=h.beforeUnload();assert.equal(event.prevented,expected);assert.equal(event.returnValue,expected?'':undefined);};
 
 test('条件组切换保留原始空白与符号，页面和报告只包含所选组',async()=>{
   const h=harness(),data=fresh('虚构分组回归');
@@ -170,4 +183,96 @@ test('切换显示失败时不关闭旧详情或改动旧任务，原表单仍�
   const h=harness();await h.control('run').click();const form=h.get('review-form');form.fields={};h.read('currentTask().goals').forEach((g,i)=>{form.fields[`status-${i}`]='unknown';form.fields[`evidence-${i}`]='保留的虚构草稿';});
   const bad=fresh('损坏汇总');bad.source='local-codex-study';const pending=h.get('load-study').click();h.respond(1,bad);await pending;
   assert.equal(h.get('detail-dialog').open,true);assert.equal(h.get('review-form'),form);await form.emit('submit',{target:form,preventDefault(){}});assert.equal(h.read('currentTask().runs[0].checks[currentTask().goals[0].id].evidence'),'保留的虚构草稿');
+});
+
+test('离页保护：浏览示例、打开详情、筛选与下载都不会误标为修改',async()=>{
+  const h=harness();assertUnload(h,false);
+  h.get('search').value='资料';await h.get('search').emit('input');
+  h.get('scenario-filter').value='research';await h.get('scenario-filter').emit('change');
+  h.get('compare-task').value=h.read('dataset.tasks[1].id');await h.get('compare-task').emit('change');
+  await h.get('group-select').emit('change');assertUnload(h,false);
+  await h.control('run').click();assertUnload(h,false);
+  await h.get('review-form').emit('input');assertUnload(h,false);
+  await h.get('close-dialog').click();assertUnload(h,false);
+  await h.get('template-button').click();await h.get('save-dataset').click();
+  await h.get('export-report').click();assertUnload(h,false);
+  await h.get('report-download').click();await h.get('close-report').click();assertUnload(h,false);
+  // beforeunload must use the browser's native mechanism, never a second confirm.
+  h.read("confirm=()=>{throw Error('unexpected confirm')}");assertUnload(h,false);
+});
+
+test('离页保护：仅实际目标或预算变更触发，未应用预算也被保护',async()=>{
+  for(const kind of ['weight','required','budget']){
+    const h=harness();
+    if(kind==='weight'){
+      const value=h.read('currentTask().goals[0].weight'),same=h.control('weight');same.value=String(value);await same.emit('change');assertUnload(h,false);
+      const changed=h.control('weight');changed.value=String(value===1?2:1);await changed.emit('change');
+    }else if(kind==='required'){
+      const value=h.read('currentTask().goals[0].required'),same=h.control('required');same.checked=value;await same.emit('change');assertUnload(h,false);
+      const changed=h.control('required');changed.checked=!value;await changed.emit('change');
+    }else{
+      const value=h.read('budget');h.get('budget-input').value=String(value);await h.get('budget-input').emit('input');assertUnload(h,false);
+      await h.get('budget-input').emit('keydown',{key:'Enter'});assertUnload(h,false);
+      h.get('budget-input').value='';await h.get('budget-input').emit('input');assertUnload(h,true);
+      await h.get('budget-input').emit('keydown',{key:'Enter'});assertUnload(h,false);
+      h.get('budget-input').value=String(value-1);await h.get('budget-input').emit('input');assertUnload(h,true);
+      await h.get('budget-input').emit('keydown',{key:'Enter'});
+    }
+    assertUnload(h,true);await h.get('save-dataset').click();assertUnload(h,true);
+  }
+});
+
+test('离页保护：导入即保护，下载成功或失败不解除，仅确认恢复示例后清除',async()=>{
+  const h=harness();await h.import(file(fresh('需要保留的记录')));assertUnload(h,true);
+  h.read("confirm=()=>{throw Error('unexpected confirm')}");assertUnload(h,true);
+  await h.get('save-dataset').click();assertUnload(h,true);
+  await h.get('export-report').click();await h.get('report-download').click();await h.get('close-report').click();assertUnload(h,true);
+  h.read("URL.createObjectURL=()=>{throw Error('模拟下载失败')}");await h.get('save-dataset').click();assertUnload(h,true);assert.match(h.get('toast').textContent,/模拟下载失败/);
+  h.read('confirm=()=>false');await h.get('reset-button').click();assertUnload(h,true);assert.equal(h.read('dataset.tasks[0].title'),'需要保留的记录');
+  h.read('confirm=()=>true');await h.get('reset-button').click();assertUnload(h,false);assert.equal(h.read('dataset.tasks[0].title'),globalThis.AGENT_SAMPLE.tasks[0].title);
+});
+
+test('离页保护：复核草稿可恢复原值或明确关闭，验证失败不会丢失保护',async()=>{
+  const h=harness();await h.control('run').click();const form=h.get('review-form'),original={...form.fields};
+  form.fields['evidence-0']+=' 未提交补充';await form.emit('input');assertUnload(h,true);
+  form.fields={...original};await form.emit('input');assertUnload(h,false);
+  form.fields['status-0']=original['status-0']==='unknown'?'pass':'unknown';await form.emit('change');assertUnload(h,true);
+  form.fields={...original};await form.emit('change');assertUnload(h,false);
+  form.fields['status-0']='pass';form.fields['evidence-0']='';await form.emit('input');
+  await form.emit('submit',{target:form,preventDefault(){}});assertUnload(h,true);assert.equal(h.get('detail-dialog').open,true);assert.match(h.get('toast').textContent,/补充验收证据/);
+  await h.get('close-dialog').click();assertUnload(h,false);
+  await h.control('run').click();const reopened=h.get('review-form');assert.deepEqual(reopened.fields,original);assertUnload(h,false);
+  await reopened.emit('submit',{target:reopened,preventDefault(){}});assertUnload(h,false);
+});
+
+test('离页保护：保存实际复核后关闭详情与下载仍保持保护',async()=>{
+  const h=harness();await h.control('run').click();const form=h.get('review-form');
+  form.fields['evidence-0']='人工补充的可追溯证据';await form.emit('input');assertUnload(h,true);
+  await form.emit('submit',{target:form,preventDefault(){}});assert.equal(h.get('detail-dialog').open,false);assertUnload(h,true);
+  await h.get('save-dataset').click();assertUnload(h,true);
+  assert.equal(JSON.parse(await h.downloads.at(-1).text()).tasks[0].runs[0].checks[h.read('currentTask().goals[0].id')].evidence,'人工补充的可追溯证据');
+});
+
+test('离页保护：失败导入不改变干净、已修改或未提交草稿的保护状态',async()=>{
+  for(const state of ['clean','imported','review','budget']){
+    const h=harness();let form;
+    if(state==='imported')await h.import(file(fresh('保留原记录')));
+    if(state==='review'){await h.control('run').click();form=h.get('review-form');form.fields['evidence-0']='需保留的草稿';await form.emit('input');}
+    if(state==='budget'){h.get('budget-input').value='456';await h.get('budget-input').emit('input');}
+    const expected=h.read('JSON.stringify(dataset)');
+    const renderFailure=fresh('无效汇总');renderFailure.source='local-codex-study';
+    for(const bad of [{size:10,text:async()=>'{'},file({tasks:[]}),{size:2*1024*1024+1,text:()=>{throw Error('oversized file read');}}]){
+      await h.import(bad);assertUnload(h,state!=='clean');assert.equal(h.read('JSON.stringify(dataset)'),expected);
+    }
+    const pending=h.get('load-study').click();h.respond(1,renderFailure);await pending;
+    assertUnload(h,state!=='clean');assert.equal(h.read('JSON.stringify(dataset)'),expected);
+    if(state==='review'){assert.equal(h.get('review-form'),form);assert.equal(form.fields['evidence-0'],'需保留的草稿');await h.get('close-dialog').click();assertUnload(h,false);}
+    if(state==='budget'){assert.equal(h.get('budget-input').value,'456');h.get('budget-input').value=String(h.read('budget'));await h.get('budget-input').emit('input');assertUnload(h,false);}
+  }
+});
+
+test('离页保护：成功本机载入与文件一致，失败或失效载入不标记示例',async()=>{
+  const h=harness(),failed=h.get('load-live').click();h.respond(1,{error:'模拟读取失败'},false);await failed;assertUnload(h,false);
+  const pending=h.get('load-live').click();await h.control('run').click();h.respond(2,fresh('迟到记录'));await pending;assertUnload(h,false);
+  await h.get('close-dialog').click();const loaded=h.get('load-live').click();h.respond(3,fresh('当前本机记录'));await loaded;assertUnload(h,true);
 });

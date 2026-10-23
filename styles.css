@@ -44,3 +44,5 @@ body[data-view=experiments] #notice,body[data-view=research] #notice,body[data-v
 .review-page button{color:#fff}.review-page button.secondary{color:#696179}
 
 .review-page select{display:block;width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit;min-width:0}.review-page blockquote{white-space:pre-wrap}
+
+.getting-started{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px 20px;margin-bottom:20px;border:1px solid #ded6ef;border-radius:10px;background:#fff}.getting-started strong{font-size:14px}.getting-started p{font-size:12px;margin:5px 0 0}.getting-started>div:last-child{display:flex;gap:10px;flex-wrap:wrap}.getting-started a{display:inline-block}@media(max-width:800px){.getting-started{align-items:flex-start;flex-direction:column}}
