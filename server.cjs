@@ -24,7 +24,7 @@ Object.assign(allowed, {'/project-review-backup.js':'project-review-backup.js'})
 Object.assign(allowed, {'/report-comparison.html':'report-comparison.html','/report-comparison.css':'report-comparison.css','/report-comparison.js':'report-comparison.js','/report-comparison-presentation.js':'report-comparison-presentation.js','/report-comparison-markdown.js':'report-comparison-markdown.js','/report-comparison-ui.js':'report-comparison-ui.js','/report-comparison-example.json':'report-comparison-example.json'});
 types['.json']='application/json; charset=utf-8';
 Object.assign(allowed, {'/record-evaluation.js':'record-evaluation.js'});
-Object.assign(allowed, Object.fromEntries(['start.html','start.css','start-ui.js','file-guide.js','record-entry.html','record-entry.css','record-entry-core.js','record-entry.js'].map(file => ['/' + file, file])));
+Object.assign(allowed, Object.fromEntries(['start.html','start.css','start-ui.js','file-guide.js','record-entry.html','record-entry.css','record-entry-core.js','record-entry-draft.js','record-entry.js'].map(file => ['/' + file, file])));
 const port = Number(process.env.PORT || 4173);
 function createServer(executor=bridge,{passageReader=latestPassageStudy,taskExecutor=taskExecution,projectReviewReader=readReview}={}) {
 let running=false;

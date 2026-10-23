@@ -3,9 +3,11 @@
   const $ = id => document.getElementById(id);
   const E = window.AgentEvaluation;
   const B = window.AgentRecordEntry.createEntryBuilder({ evaluation: E });
+  const D = window.AgentRecordEntryDraft;
   const taskId = `task-${typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')}`;
   const draft = { id: taskId, title: '', description: '', scenario: 'coding', goals: [{ id: 'g1', label: '', weight: 3, required: true }], runs: [] };
   let goalSequence = 1, runSequence = 0, locked = false, dirty = false, lockedGoals = [], lockedTask = null;
+  let restoreEpoch = 0, pendingDraft = null, restoreReading = false;
   const runViews = new Map();
   function node(tag, className, content) {
     const element = document.createElement(tag);
@@ -18,9 +20,38 @@
     $('entry-notice').classList.toggle('error', error);
   }
   function changed() {
+    invalidateRestore();
     dirty = true;
     $('review').hidden = true;
     say('内容已修改。下载前会重新校验；刷新或关闭前请保存任务数据。');
+  }
+  function draftNotice(message, error = false) {
+    $('draft-notice').textContent = message;
+    $('draft-notice').classList.toggle('error', error);
+  }
+  function invalidateRestore() {
+    restoreEpoch++;
+    const hadPreview = restoreReading || pendingDraft !== null || !$('draft-preview').hidden;
+    restoreReading = false; pendingDraft = null; $('draft-preview').hidden = true; $('confirm-draft').disabled = true;
+    $('draft-summary').textContent = '';
+    if (hadPreview) draftNotice('当前表单已变化，原恢复预览已取消。需要恢复时，请重新选择草稿。');
+  }
+  function snapshot() {
+    return structuredClone({ draft, locked, lockedTask, lockedGoals, budget: $('entry-budget').value, goalSequence, runSequence });
+  }
+  function applySnapshot(state) {
+    Object.assign(draft, state.draft);
+    locked = state.locked; lockedTask = state.lockedTask; lockedGoals = state.lockedGoals;
+    goalSequence = state.goalSequence; runSequence = state.runSequence;
+    $('task-title').value = draft.title; $('task-description').value = draft.description; $('task-scenario').value = draft.scenario;
+    $('entry-budget').value = state.budget; currentBudget = state.budget;
+    renderGoals(); renderRuns(); syncControls(); $('review').hidden = true;
+  }
+  function downloadJson(json, prefix) {
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json;charset=utf-8' }));
+    const anchor = node('a'); anchor.href = url;
+    anchor.download = `${prefix}-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   function bind(input, object, key, after) {
     const update = () => {
@@ -115,7 +146,8 @@
       fields.append(meta);
       const checks = node('div', 'checks');
       draft.goals.forEach((goal, index) => {
-        const check = run.checks[goal.id];
+        // A newly added goal can be pending while its original checks are kept.
+        const check = run.checks[goal.id] ?? { status: 'unknown', evidence: '' };
         const row = node('div', 'check'); row.append(node('h3', '', `${index + 1}. ${goal.label} · ${goal.required ? '必需项' : '可选项'} · 权重 ${goal.weight}`));
         const status = select([['unknown', '待核验'], ['pass', '通过'], ['fail', '未通过']], check.status);
         const evidence = node('textarea'); evidence.rows = 3; evidence.maxLength = 6000; evidence.value = check.evidence; evidence.placeholder = '粘贴实际验收结果、日志摘录、输出片段或可查证的位置。';
@@ -134,7 +166,13 @@
   }
   function addRun() {
     if (!locked || draft.runs.length >= 30) return;
-    const run = { id: `${taskId}-run-${++runSequence}`, strategy: '', model: '', comparisonGroup: '', tokens: '', durationSec: '', checks: Object.fromEntries(draft.goals.map(goal => [goal.id, { status: 'unknown', evidence: '' }])), open: true };
+    let id, nextSequence = runSequence;
+    do {
+      if (!Number.isSafeInteger(nextSequence + 1) || nextSequence + 1 >= Number.MAX_SAFE_INTEGER) { say('记录编号已达上限，未新增。请保存当前草稿。', true); return; }
+      id = `${draft.id}-run-${++nextSequence}`;
+    } while (draft.runs.some(run => run.id === id));
+    runSequence = nextSequence;
+    const run = { id, strategy: '', model: '', comparisonGroup: '', tokens: '', durationSec: '', checks: Object.fromEntries(draft.goals.map(goal => [goal.id, { status: 'unknown', evidence: '' }])), open: true };
     draft.runs.push(run); changed(); renderRuns(); renderGoals(); syncControls();
     runViews.get(run.id).details.querySelector('input').focus();
   }
@@ -157,10 +195,17 @@
   $('entry-budget').addEventListener('input', () => { if (currentBudget !== $('entry-budget').value) { currentBudget = $('entry-budget').value; changed(); } });
   $('add-goal').addEventListener('click', () => {
     if (locked || draft.goals.length >= 20) return;
-    draft.goals.push({ id: `g${++goalSequence}`, label: '', weight: 3, required: true }); changed(); renderGoals(); syncControls();
+    let id, nextSequence = goalSequence;
+    do {
+      if (!Number.isSafeInteger(nextSequence + 1) || nextSequence + 1 >= Number.MAX_SAFE_INTEGER) { say('目标编号已达上限，未新增。请保存当前草稿。', true); return; }
+      id = `g${++nextSequence}`;
+    } while (draft.goals.some(goal => goal.id === id));
+    goalSequence = nextSequence;
+    draft.goals.push({ id, label: '', weight: 3, required: true }); changed(); renderGoals(); syncControls();
     $('goals').lastElementChild.querySelector('input').focus();
   });
   $('lock-goals').addEventListener('click', () => {
+    invalidateRestore();
     try {
       const nextTask = B.normalizeTask(draft);
       const taskChanged = lockedTask !== null && JSON.stringify(nextTask) !== JSON.stringify(lockedTask);
@@ -176,6 +221,7 @@
     } catch (error) { $('goal-notice').textContent = error.message; say(error.message, true); }
   });
   $('edit-goals').addEventListener('click', () => {
+    invalidateRestore();
     locked = false; $('review').hidden = true;
     $('goal-notice').textContent = '修改后请重新锁定。任务信息改动会复位全部验收状态，目标改动只复位对应状态，原证据文字保留；已有记录时不允许删除目标。';
     renderGoals(); renderRuns(); syncControls(); $('goals').querySelector('input').focus();
@@ -189,12 +235,49 @@
     event.preventDefault();
     try {
       const result = validate();
-      const blob = new Blob([result.json], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob); const anchor = node('a'); anchor.href = url;
-      anchor.download = `agent-records-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-      document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      downloadJson(result.json, 'agent-records');
       say('已发起任务数据下载，填写内容仍保留。请确认文件已保存；到首页或报告生成器后，再次选择刚下载的文件。');
     } catch (error) { $('review').hidden = true; say(error.message, true); }
+  });
+  $('save-draft').addEventListener('click', () => {
+    try {
+      const saved = D.serialize(snapshot()); downloadJson(saved.json, 'agent-entry-draft');
+      draftNotice('已发起草稿下载，当前填写内容保留。请确认文件已保存；草稿不能直接导入任务工作台或报告生成器。');
+    } catch (error) { draftNotice('未保存草稿：' + error.message, true); }
+  });
+  $('choose-draft').addEventListener('click', () => { invalidateRestore(); $('draft-file').value = ''; $('draft-file').click(); });
+  $('draft-file').addEventListener('change', async event => {
+    invalidateRestore(); const epoch = restoreEpoch, file = event.target.files?.[0];
+    if (!file) { draftNotice('未选择草稿，当前表单保留。'); return; }
+    restoreReading = true; draftNotice('正在本地读取草稿，尚未替换当前表单…');
+    try {
+      if (file.size > D.MAX_BYTES) throw new Error('草稿超过 16MiB，未读取。');
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (epoch !== restoreEpoch) return;
+      const state = D.parseBytes(bytes);
+      restoreReading = false; pendingDraft = { state, epoch };
+      $('draft-summary').textContent = `任务：${state.draft.title.trim() || '尚未填写名称'}；${state.draft.goals.length} 项目标，${state.draft.runs.length} 条记录；${state.locked ? '任务与目标已锁定' : '任务与目标正在编辑'}。这只说明草稿结构可读取，不代表证据或验收通过。`;
+      $('draft-preview').hidden = false; $('confirm-draft').disabled = false;
+      draftNotice('草稿已读取。确认替换之前，当前表单保持原样。');
+    } catch (error) {
+      if (epoch !== restoreEpoch) return;
+      invalidateRestore(); draftNotice('无法恢复草稿：' + error.message + ' 当前表单保留。', true);
+    }
+  });
+  $('cancel-draft').addEventListener('click', () => { invalidateRestore(); $('draft-file').value = ''; draftNotice('已取消恢复，当前表单保留。'); });
+  $('confirm-draft').addEventListener('click', () => {
+    if (!pendingDraft || pendingDraft.epoch !== restoreEpoch) return;
+    const incoming = pendingDraft.state, previous = snapshot(), previousDirty = dirty;
+    invalidateRestore();
+    try {
+      applySnapshot(incoming); dirty = true;
+      $('goal-notice').textContent = locked ? '已恢复锁定的任务与目标，可继续填写记录。' : '已恢复正在编辑的任务与目标。重新锁定时，改动仍会使对应判断回到待核验，证据保留。';
+      say('录入草稿已恢复。内容仍在当前页面内存中，完成后请校验并下载任务数据。');
+      draftNotice('已恢复草稿，任务编号和填写进度保留。草稿结构检查不替代任务数据校验或证据复核。');
+    } catch (error) {
+      applySnapshot(previous); dirty = previousDirty;
+      draftNotice('恢复未完成，原表单已保留。请保存当前草稿后重新尝试。', true);
+    }
   });
   window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
   renderGoals(); syncControls();

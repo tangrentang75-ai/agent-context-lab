@@ -4,6 +4,8 @@ const fs = require('node:fs'), vm = require('node:vm');
 const F = require('./file-guide.js');
 const bytes = value => Buffer.from(JSON.stringify(value));
 const identify = value => F.identifyBytes(bytes(value));
+const entryDraft = () => ({ schema: 'acl-record-entry-draft-v1', savedAt: '2026-10-23T00:00:00.000Z',
+  state: { draft: { task: {}, goals: [], runs: [] }, locked: false, lockedTask: null, lockedGoals: [], budget: '', goalSequence: 1, runSequence: 0 } });
 const examples = [
   [{ version: 1, demo: false, tasks: [{}] }, 'dataset'],
   [{ schema: 'acl-record-evaluation-v1', tasks: [{}] }, 'record-evaluation'],
@@ -13,10 +15,11 @@ const examples = [
   [{ reportVersion: 1, task: {}, results: [] }, 'single-task-report'],
   [{ type: 'cost-estimate', assumptions: {} }, 'cost-estimate'],
   [{ schema: 'observation-plan-envelope-v1', plan: {}, sha256: '由目标页检查' }, 'observation-plan'],
-  [{ schema: 'project-review-storage-recovery-v1', storageKey: 'acl-project-reviews-v1', raw: '损坏的原内容' }, 'storage-recovery']
+  [{ schema: 'project-review-storage-recovery-v1', storageKey: 'acl-project-reviews-v1', raw: '损坏的原内容' }, 'storage-recovery'],
+  [entryDraft(), 'record-entry-draft']
 ];
 
-test('识别九类用途，只辨识最少结构而不替目标页校验内容', () => {
+test('识别十类用途，只辨识最少结构而不替目标页校验内容', () => {
   for (const [input, kind] of examples) {
     const r = identify(input);
     assert.equal(r.kind, kind);
@@ -87,7 +90,7 @@ test('特殊键和输入正文不进入输出，不更改字节或对象原型',
 });
 
 test('目的链接均为固定同站入口，锚点或首页视图确实存在', () => {
-  const allowed = new Set(['/#overview', '/report-comparison.html#generator', '/report-comparison.html', '/project-review.html', '/project-review.html#review-backup', '/project-review.html#plan-import']);
+  const allowed = new Set(['/#overview', '/report-comparison.html#generator', '/report-comparison.html', '/project-review.html', '/project-review.html#review-backup', '/project-review.html#plan-import', '/record-entry.html#draft-tools']);
   for (const [input] of examples) for (const destination of identify({ ...input, href: 'https://evil.example' }).destinations) {
     assert.ok(allowed.has(destination.href));
     const [file, anchor] = destination.href.slice(1).split('#');
@@ -108,4 +111,47 @@ test('浏览器全局和 CommonJS 暴露相同 API，调用结果互不共享可
   a.steps.push('污染'); a.destinations[0].href = 'https://evil.example';
   const b = identify(examples[0][0]);
   assert.doesNotMatch(JSON.stringify(b), /污染|evil\.example/);
+});
+
+test('录入草稿引导重新选择、预览与确认替换，不把未完成表单当作有效任务数据', () => {
+  for (const input of [entryDraft(), { schema: 'acl-record-entry-draft-v1', savedAt: '由目标页校验时间', state: { draft: {} } }]) {
+    const result = identify(input);
+    assert.equal(result.kind, 'record-entry-draft');
+    assert.match(result.description, /尚未完成的录入表单/);
+    assert.match(result.description, /不是有效任务数据/);
+    assert.deepEqual(result.destinations, [{ label: '任务记录：恢复录入草稿', href: '/record-entry.html#draft-tools' }]);
+    assert.match(result.steps[0], /恢复录入草稿.*再次选择/);
+    assert.match(result.steps[1], /预览.*完整校验/);
+    assert.match(result.steps[2], /明确确认替换当前表单/);
+    assert.match(result.note, /不会自动恢复、导入或上传/);
+  }
+});
+
+test('录入草稿缺少基本结构、声明未知格式或混入其他格式标记时不猜测入口', () => {
+  const input = entryDraft();
+  for (const bad of [
+    { ...input, savedAt: null }, { ...input, state: null }, { ...input, state: [] },
+    { ...input, state: {} }, { ...input, state: { draft: [] } },
+    { ...input, schema: 'unrecognized-draft' }, { ...input, schema: ['acl-record-entry-draft-v1', 'project-review-backup-v1'] },
+    { ...input, version: 1, demo: false, tasks: [{}] },
+    { ...input, reportVersion: 1, task: {}, results: [] },
+    { ...input, type: 'cost-estimate', assumptions: {} }
+  ]) {
+    const result = identify(bad);
+    assert.equal(result.kind, 'unknown');
+    assert.deepEqual(result.destinations, []);
+  }
+});
+
+test('录入草稿内容和特殊键不影响固定恢复链接，不回显或更改文件字节', () => {
+  const input = entryDraft();
+  input.savedAt = 'PRIVATE_TIMESTAMP';
+  input.state.draft = JSON.parse('{"title":"PRIVATE_TITLE","body":"<script>PRIVATE_BODY</script>","href":"javascript:PRIVATE_LINK","__proto__":{"polluted":true}}');
+  input.href = 'https://evil.example/restore';
+  const original = bytes(input), before = Buffer.from(original), result = F.identifyBytes(original);
+  assert.equal(result.kind, 'record-entry-draft');
+  assert.deepEqual(original, before);
+  assert.equal({}.polluted, undefined);
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE_|<script>|evil\.example|polluted/);
+  assert.deepEqual(result.destinations.map(destination => destination.href), ['/record-entry.html#draft-tools']);
 });

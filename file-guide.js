@@ -37,6 +37,11 @@
     if (hasSchema) {
       // These checks identify a route only. The destination owns full validation.
       switch (value.schema) {
+        case 'acl-record-entry-draft-v1':
+          if (!text(value, 'savedAt') || !record(value, 'state') || !record(value.state, 'draft')) break;
+          return result('record-entry-draft', '任务记录录入草稿', '这是尚未完成的录入表单，不是有效任务数据，不能当作任务数据导入首页或报告生成器。',
+            ['打开任务记录录入页，点击“恢复录入草稿”，再次选择此文件。', '查看恢复预览，由目标页面完整校验草稿内容。', '确认预览后，明确确认替换当前表单；取消即可保留当前表单。'],
+            [{ label: '任务记录：恢复录入草稿', href: '/record-entry.html#draft-tools' }], '仅提供恢复入口，不会自动恢复、导入或上传草稿。');
         case 'acl-record-evaluation-v1':
           if (!array(value, 'tasks') || !value.tasks.length) break;
           return result('record-evaluation', '完整记录评估报告', '可与另一份完整评估报告一起查看条件和记录差异。',

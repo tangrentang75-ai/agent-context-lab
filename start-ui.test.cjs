@@ -184,7 +184,7 @@ test('HTTP 仅提供新增页面白名单资源及正确 MIME，测试和私有�
     '/start.html': 'text/html; charset=utf-8', '/start.css': 'text/css; charset=utf-8',
     '/start-ui.js': 'text/javascript; charset=utf-8', '/file-guide.js': 'text/javascript; charset=utf-8',
     '/record-entry.html': 'text/html; charset=utf-8', '/record-entry.css': 'text/css; charset=utf-8',
-    '/record-entry-core.js': 'text/javascript; charset=utf-8', '/record-entry.js': 'text/javascript; charset=utf-8'
+    '/record-entry-core.js': 'text/javascript; charset=utf-8', '/record-entry-draft.js': 'text/javascript; charset=utf-8', '/record-entry.js': 'text/javascript; charset=utf-8'
   };
   for (const [path, mime] of Object.entries(assets)) {
     const response = await fetch(base + path);
