@@ -23,7 +23,7 @@ function harness() {
   const elements = new Map(), downloads = [], windowListeners = {}, effects = [];
   let failGoalRender = false;
   class Element {
-    constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.listeners = {}; this.value = ''; this.hidden = false; this.disabled = false; this._text = ''; this.className = ''; this.parentNode = null; this.classList = { toggle() {} }; }
+    constructor(tag) { this.tagName = tag.toUpperCase(); this.children = []; this.listeners = {}; this.value = ''; this.hidden = false; this.disabled = false; this._text = ''; this.className = ''; this.parentNode = null; this.attributes = new Map(); this.classList = { toggle: (name, force) => { const names = new Set(this.className.split(/\s+/).filter(Boolean)); if (force ?? !names.has(name)) names.add(name); else names.delete(name); this.className = [...names].join(' '); } }; }
     get textContent() { return this._text + this.children.map(child => child.textContent).join(''); }
     set textContent(value) { this._text = String(value); this.children = []; }
     set innerHTML(_) { throw Error('Imported drafts must be rendered as text'); }
@@ -32,6 +32,9 @@ function harness() {
     get lastElementChild() { return this.children.at(-1); }
     querySelectorAll(selector) { const found = []; for (const child of this.children) { if (selector.startsWith('.') ? child.className.split(/\s+/).includes(selector.slice(1)) : child.tagName === selector.toUpperCase()) found.push(child); found.push(...child.querySelectorAll(selector)); } return found; }
     querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
+    getAttribute(name) { return this.attributes.get(name) ?? null; }
+    setAttribute(name, value) { this.attributes.set(name, String(value)); }
+    removeAttribute(name) { this.attributes.delete(name); }
     addEventListener(type, listener) { (this.listeners[type] ||= []).push(listener); }
     async emit(type) { const event = { target: this, preventDefault() {} }; for (const listener of this.listeners[type] || []) await listener(event); }
     click() { return this.disabled ? Promise.resolve() : this.emit('click'); }
@@ -54,6 +57,7 @@ function harness() {
   context.window = context;
   vm.createContext(context); vm.runInContext(fs.readFileSync(require.resolve('./record-entry.js'), 'utf8'), context);
   return { get, downloads, effects,
+    get activeElement() { return context.document.activeElement; },
     async input(node, value) { node.value = value; await node.emit('input'); },
     goal(index = 0) { return get('goals').children[index].querySelector('input'); },
     select(selected) { get('draft-file').files = selected ? [selected] : []; get('draft-file').value = selected ? 'selected' : ''; return get('draft-file').emit('change'); },
@@ -197,4 +201,128 @@ test('恢复接近安全整数上限的序号后，拒绝新增且仍能保存�
   await h.get('add-goal').click(); assert.match(h.get('entry-notice').textContent, /目标编号已达上限/);
   assert.deepEqual(await h.state(), editing);
   assert.deepEqual(editing.draft.runs, before.draft.runs);
+});
+
+function feedback(input) { return input.parentNode.parentNode.querySelector('.field-feedback'); }
+function assertFieldError(h, input, box) {
+  assert.equal(h.activeElement, input);
+  assert.equal(input.getAttribute('aria-invalid'), 'true');
+  assert.equal(box.hidden, false);
+  assert.ok(input.getAttribute('aria-describedby').split(' ').includes(box.querySelector('p').id));
+  assert.match(box.querySelector('p').textContent, /^请修改：/);
+}
+
+test('锁定时定位任务及目标缺项，附近继续校验逐项修正且输入不抢焦点', async () => {
+  const h = harness(), title = h.get('task-title'), description = h.get('task-description');
+  const titleBox = h.get('task-title-field').querySelector('.field-feedback');
+  await h.get('lock-goals').click(); assertFieldError(h, title, titleBox);
+  assert.equal(h.beforeUnload(), false, 'validation alone does not mark untouched data dirty');
+  await h.input(title, '手动验收任务');
+  assert.equal(h.activeElement, title); assert.equal(title.getAttribute('aria-invalid'), null);
+  assert.equal(title.getAttribute('aria-describedby'), null);
+  assert.equal(titleBox.hidden, false); assert.match(titleBox.textContent, /内容已修改，请继续校验/);
+  assert.equal(h.get('goal-notice').textContent, '内容已修改，请重新锁定任务与目标。');
+  await titleBox.querySelector('button').click();
+  const descriptionBox = h.get('task-description-field').querySelector('.field-feedback');
+  assertFieldError(h, description, descriptionBox); assert.equal(titleBox.hidden, true);
+  await h.input(description, '既有输入和验收范围'); await descriptionBox.querySelector('button').click();
+  const goal = h.goal(), goalBox = feedback(goal), hint = goal.getAttribute('aria-describedby').split(' ')[0];
+  assertFieldError(h, goal, goalBox);
+  await h.input(goal, '实际结果符合要求');
+  assert.equal(goal.getAttribute('aria-describedby'), hint, 'keep the original hint after clearing the error');
+  assert.equal(h.activeElement, goal);
+  await goalBox.querySelector('button').click();
+  assert.equal(h.get('lock-goals').hidden, true); assert.equal(h.get('runs').children.length, 1);
+  assert.equal(goal.getAttribute('aria-invalid'), null); assert.equal(goalBox.hidden, true);
+  assert.equal(h.downloads.length, 0); assert.deepEqual(h.effects, []);
+});
+
+test('后续折叠记录的特殊 ID 证据准确定位，原状态及证据保留，修正后能继续校验', async () => {
+  const h = harness(), state = savedState(), ids = ['g[0]." / <img>', '__proto__'];
+  state.draft.goals.forEach((goal, index) => { goal.id = ids[index]; });
+  state.lockedGoals = structuredClone(state.draft.goals);
+  state.draft.runs[0].checks = Object.fromEntries(ids.map(id => [id, { status: 'pass', evidence: '原始证据 ' + id }]));
+  state.draft.runs[0].open = false;
+  const second = structuredClone(state.draft.runs[0]); second.id = 'task-restored-run-5';
+  second.checks[ids[1]].evidence = ''; state.draft.runs.push(second); state.runSequence = 5;
+  await h.select(file(state)); await h.get('confirm-draft').click();
+  const firstView = h.get('runs').children[0], secondView = h.get('runs').children[1];
+  const evidence = secondView.querySelectorAll('textarea')[1], box = feedback(evidence);
+  const hint = evidence.getAttribute('aria-describedby');
+  await h.get('validate').click(); assertFieldError(h, evidence, box);
+  assert.equal(firstView.open, false); assert.equal(secondView.open, true);
+  assert.match(box.textContent, /记录 2.*日志完整.*必须填写证据/);
+  assert.equal(secondView.querySelectorAll('textarea')[0].value, '原始证据 ' + ids[0]);
+  const saved = await h.state();
+  assert.equal(saved.draft.runs[1].checks[ids[1]].status, 'pass');
+  assert.equal(saved.draft.runs[1].checks[ids[1]].evidence, '');
+  assert.equal(saved.draft.runs[0].checks[ids[0]].evidence, '原始证据 ' + ids[0]);
+  await h.input(evidence, '<script>仍按文字保留的实际证据</script>');
+  assert.equal(h.activeElement, evidence); assert.equal(evidence.getAttribute('aria-invalid'), null);
+  assert.equal(evidence.getAttribute('aria-describedby'), hint);
+  const downloads = h.downloads.length; await box.querySelector('button').click();
+  assert.equal(box.hidden, true); assert.equal(h.get('review').hidden, false);
+  assert.equal(h.activeElement, h.get('review'));
+  assert.equal(h.downloads.length, downloads); assert.deepEqual(h.effects, []);
+});
+
+test('空预算定位并保持原输入，0 可通过校验而不会当作未知', async () => {
+  const h = harness(); await fillCurrent(h);
+  const budget = h.get('entry-budget'), box = h.get('entry-budget-field').querySelector('.field-feedback');
+  await h.input(budget, ''); await h.get('validate').click(); assertFieldError(h, budget, box);
+  assert.equal(budget.value, ''); assert.match(box.textContent, /不能为空；0 是有效数值/);
+  await h.input(budget, '0'); await box.querySelector('button').click();
+  assert.equal(budget.value, '0'); assert.equal(budget.getAttribute('aria-invalid'), null);
+  assert.equal(box.hidden, true); assert.equal(h.get('review').hidden, false);
+  assert.match(h.get('review-summary').textContent, /每条记录预算 0 token/);
+  assert.equal(h.downloads.length, 0);
+});
+
+test('导出失败不下载，附近继续校验不会自动导出，保留修正后的数字与证据', async () => {
+  const h = harness(); await fillCurrent(h);
+  const run = h.get('runs').children[0], tokens = run.querySelectorAll('input')[3], box = feedback(tokens);
+  await h.input(tokens, '-1'); await h.get('entry-form').emit('submit');
+  assertFieldError(h, tokens, box); assert.equal(h.downloads.length, 0); assert.equal(h.get('review').hidden, true);
+  await h.input(tokens, '0'); await box.querySelector('button').click();
+  assert.equal(h.get('review').hidden, false); assert.equal(h.downloads.length, 0);
+  await h.get('entry-form').emit('submit'); assert.equal(h.downloads.length, 1);
+  const exported = JSON.parse(await h.downloads[0].text());
+  assert.equal(exported.tasks[0].runs[0].tokens, 0);
+  assert.equal(exported.tasks[0].runs[0].checks.g1.evidence, '当前尚待复核的证据');
+  assert.equal(h.beforeUnload(), true); assert.equal(tokens.getAttribute('aria-invalid'), null);
+});
+
+test('恢复预览和取消保留当前错误，确认替换才清除静态和动态旧错误', async () => {
+  for (const kind of ['task', 'run']) {
+    const h = harness(); let input, box;
+    if (kind === 'task') {
+      await h.get('lock-goals').click(); input = h.get('task-title'); box = h.get('task-title-field').querySelector('.field-feedback');
+    } else {
+      await fillCurrent(h); input = h.get('runs').children[0].querySelectorAll('input')[1];
+      await h.input(input, ''); await h.get('validate').click(); box = feedback(input);
+    }
+    assertFieldError(h, input, box);
+    const message = box.textContent;
+    await h.select(file(savedState())); assert.equal(input.getAttribute('aria-invalid'), 'true'); assert.equal(box.textContent, message);
+    await h.get('cancel-draft').click(); assert.equal(box.hidden, false); assert.equal(box.textContent, message);
+    await h.select(file(savedState())); await h.get('confirm-draft').click();
+    assert.equal(input.getAttribute('aria-invalid'), null); assert.equal(box.hidden, true); assert.equal(box.querySelector('p').textContent, '');
+    await h.get('validate').click(); assert.equal(h.get('review').hidden, false);
+  }
+});
+
+test('删除前一条记录后，重新校验定位新索引的现有节点而非已移除节点', async () => {
+  const h = harness(), state = savedState(), second = structuredClone(state.draft.runs[0]);
+  second.id = 'task-restored-run-5'; second.model = ''; state.draft.runs.push(second); state.runSequence = 5;
+  await h.select(file(state)); await h.get('confirm-draft').click(); await h.get('validate').click();
+  const oldInput = h.get('runs').children[1].querySelectorAll('input')[1], oldBox = feedback(oldInput);
+  assertFieldError(h, oldInput, oldBox); assert.match(oldBox.textContent, /记录 2/);
+  await h.get('runs').children[0].querySelector('.run-actions').querySelector('button').click();
+  assert.equal(oldInput.getAttribute('aria-invalid'), null); assert.equal(oldBox.hidden, true);
+  assert.equal(h.get('runs').children.length, 1);
+  const newInput = h.get('runs').children[0].querySelectorAll('input')[1];
+  assert.notEqual(newInput, oldInput); await h.get('validate').click();
+  assertFieldError(h, newInput, feedback(newInput)); assert.match(feedback(newInput).textContent, /记录 1/);
+  const saved = await h.state(); assert.equal(saved.draft.runs[0].id, second.id);
+  assert.deepEqual(saved.draft.runs[0].checks, second.checks);
 });

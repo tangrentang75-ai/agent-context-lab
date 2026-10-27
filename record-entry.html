@@ -15,8 +15,8 @@
     <section id="draft-tools" class="card draft-tools" aria-labelledby="draft-heading"><div class="section-heading"><div><p class="step">保存进度 / CONTINUE LATER</p><h2 id="draft-heading">还没填完，也可以留到下次。</h2></div></div><p class="fine">草稿保存当前表单和填写进度，允许留空或暂时填错。它不等于可评估的任务数据；完成后仍需校验并下载任务数据。</p><div class="actions"><button id="save-draft" type="button">保存录入草稿</button><button id="choose-draft" type="button">恢复录入草稿</button><input id="draft-file" type="file" accept=".json,application/json" hidden></div><p id="draft-notice" class="fine" role="status" aria-live="polite">主动下载为 JSON，之后在这里重新选择。最大 16MiB；不会自动保存在浏览器或服务器。</p><div id="draft-preview" class="draft-preview" hidden><h3>恢复前，请核对这份草稿</h3><p id="draft-summary"></p><p class="fine">确认会替换当前表单，不能合并。需要保留现在的内容，请先点击“保存录入草稿”。取消会保留当前内容；预览期间修改表单会使此预览失效。</p><div class="actions"><button id="confirm-draft" type="button" class="primary" disabled>确认替换当前表单</button><button id="cancel-draft" type="button">取消恢复</button></div></div></section>
     <form id="entry-form" novalidate>
       <section class="card" aria-labelledby="task-heading"><div class="section-heading"><div><p class="step">01 / 任务与目标</p><h2 id="task-heading">什么结果算完成？</h2></div><span id="goal-count" class="badge">1 / 20 项目标</span></div>
-        <div class="task-fields"><label>任务名称 <span>必填</span><input id="task-title" maxlength="3000" placeholder="例如：修复导出功能" required></label><label>任务类型<select id="task-scenario"><option value="coding">软件开发</option><option value="research">资料研究</option><option value="data">数据处理</option></select></label></div>
-        <label>任务要求与输入范围 <span>必填，最多 3000 字符</span><textarea id="task-description" rows="3" maxlength="3000" placeholder="写清要完成什么、使用哪些输入，以及验收范围。" required></textarea></label>
+        <div class="task-fields"><div id="task-title-field" class="entry-field"><label>任务名称 <span>必填</span><input id="task-title" maxlength="3000" placeholder="例如：修复导出功能" required></label></div><div id="task-scenario-field" class="entry-field"><label>任务类型<select id="task-scenario"><option value="coding">软件开发</option><option value="research">资料研究</option><option value="data">数据处理</option></select></label></div></div>
+        <div id="task-description-field" class="entry-field"><label>任务要求与输入范围 <span>必填，最多 3000 字符</span><textarea id="task-description" rows="3" maxlength="3000" placeholder="写清要完成什么、使用哪些输入，以及验收范围。" required></textarea></label></div>
         <p class="fine">每个目标应能独立核验。权重影响得分；必需项未通过或待核验时，不满足验收条件。</p>
         <div id="goals"></div>
         <div class="actions"><button id="add-goal" type="button">＋ 添加目标</button><button id="lock-goals" type="button" class="primary">锁定任务与目标，填写记录</button><button id="edit-goals" type="button" hidden>修改任务与目标</button></div>
@@ -28,11 +28,11 @@
         <button id="add-run" type="button" disabled>＋ 添加一条执行记录</button>
       </section>
       <section class="card export-card" aria-labelledby="export-heading"><p class="step">03 / 校验与导出</p><h2 id="export-heading">保存为首页可读取的任务数据</h2>
-        <div class="budget-row"><label>本页复核：每条记录的 token 上限<input id="entry-budget" type="text" inputmode="decimal" value="20000" maxlength="100"></label><p class="fine">预算只用于下方复核，不写入任务数据。0 是有效预算；到首页或报告生成器后需重新设置。</p></div>
+        <div class="budget-row"><div id="entry-budget-field" class="entry-field"><label>本页复核：每条记录的 token 上限<input id="entry-budget" type="text" inputmode="decimal" value="20000" maxlength="100"></label></div><p class="fine">预算只用于下方复核，不写入任务数据。0 是有效预算；到首页或报告生成器后需重新设置。</p></div>
         <p class="fine">导出标记 demo: false 仅表示由你录入；来源、条件组与证据真实性由提供者自行声明，本页不独立核实。未填写事件时间线，不会生成推测的操作日志。</p>
         <div class="actions"><button id="validate" type="button" disabled>校验并复核</button><button id="download" type="submit" class="primary" disabled>下载任务数据 JSON</button></div>
-        <p id="entry-notice" class="notice" role="status" aria-live="polite">完成至少一条记录后可校验并下载任务数据；未完成时可先保存草稿。通过 / 未通过必须附有证据。</p>
-        <div id="review" hidden><h3>当前填写内容的复核</h3><p id="review-summary"></p><div id="review-rows"></div></div>
+        <p id="entry-notice" class="notice" role="status" aria-live="polite">完成至少一条记录后可校验并下载任务数据；未完成时可先保存草稿。校验失败会定位到首个可修改的字段；修改后可在附近继续校验。通过 / 未通过必须附有证据。</p>
+        <div id="review" tabindex="-1" aria-labelledby="review-heading" hidden><h3 id="review-heading">当前填写内容的复核</h3><p id="review-summary"></p><div id="review-rows"></div></div>
         <div class="next-step"><h3>下载后怎么用？</h3><p>文件可导入首页，或交给报告生成器生成完整评估报告。新页面不会自动接收填写内容，请再次选择刚下载的文件。</p><div class="links"><a href="/" target="_blank" rel="noopener">打开首页，导入任务数据 ↗</a><a href="report-comparison.html#generator" target="_blank" rel="noopener">打开报告生成器 ↗</a></div></div>
         <p class="fine">最多 1 个任务、20 项目标、30 条记录，文件最大 2MiB。下载保留本页内容；有输入修改时，会请求浏览器离页提醒；提醒不能代替确认下载。分享前请检查证据中的私人信息。</p>
       </section>

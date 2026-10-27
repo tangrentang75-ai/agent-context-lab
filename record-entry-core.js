@@ -3,18 +3,24 @@
   const MAX_BYTES = 2 * 1024 * 1024;
   function createEntryBuilder({ evaluation: E }) {
     if (!E || typeof E.validateDataset !== 'function') throw new Error('缺少本机数据校验规则');
-    function number(value, label, optional) {
+    // Paths identify form fields without parsing translated messages or treating IDs as selectors.
+    function fieldError(message, fieldPath) {
+      const error = new Error(message);
+      error.fieldPath = fieldPath.slice();
+      return error;
+    }
+    function number(value, label, optional, fieldPath) {
       if (value === null || value === undefined || (typeof value === 'string' && !value.trim())) {
         if (optional) return null;
-        throw new Error(`${label}不能为空；0 是有效数值`);
+        throw fieldError(`${label}不能为空；0 是有效数值`, fieldPath);
       }
-      if (typeof value !== 'number' && (typeof value !== 'string' || !/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()))) throw new Error(`${label}必须是非负有限数`);
+      if (typeof value !== 'number' && (typeof value !== 'string' || !/^(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()))) throw fieldError(`${label}必须是非负有限数`, fieldPath);
       const parsed = Number(value);
-      if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${label}必须是非负有限数`);
+      if (!Number.isFinite(parsed) || parsed < 0) throw fieldError(`${label}必须是非负有限数`, fieldPath);
       return parsed;
     }
-    function text(value, label, max, allowEmpty = false) {
-      if (typeof value !== 'string' || (!allowEmpty && !value.trim()) || value.length > max) throw new Error(`${label}${allowEmpty ? '' : '必须是非空文本，且'}不超过 ${max} 字符`);
+    function text(value, label, max, allowEmpty, fieldPath) {
+      if (typeof value !== 'string' || (!allowEmpty && !value.trim()) || value.length > max) throw fieldError(`${label}${allowEmpty ? '' : '必须是非空文本，且'}不超过 ${max} 字符`, fieldPath);
       return value;
     }
     function normalizeGoals(goals) {
@@ -22,19 +28,19 @@
       const seen = new Set();
       return goals.map((goal, index) => {
         if (!goal || typeof goal !== 'object') throw new Error(`目标 ${index + 1} 格式错误`);
-        const id = goal.id === undefined ? `g${index + 1}` : text(goal.id, `目标 ${index + 1} ID`, 100);
-        if (seen.has(id)) throw new Error('目标 ID 重复');
+        const id = goal.id === undefined ? `g${index + 1}` : text(goal.id, `目标 ${index + 1} ID`, 100, false, ['goals', index, 'id']);
+        if (seen.has(id)) throw fieldError('目标 ID 重复', ['goals', index, 'id']);
         seen.add(id);
-        const weight = number(goal.weight, `目标 ${index + 1} 权重`, false);
-        if (!Number.isInteger(weight) || weight < 1 || weight > 5) throw new Error(`目标 ${index + 1} 权重应为 1—5 的整数`);
-        if (typeof goal.required !== 'boolean') throw new Error(`目标 ${index + 1} 必须明确是否为必需项`);
-        return { id, label: text(goal.label, `目标 ${index + 1}`, 300), weight, required: goal.required };
+        const weight = number(goal.weight, `目标 ${index + 1} 权重`, false, ['goals', index, 'weight']);
+        if (!Number.isInteger(weight) || weight < 1 || weight > 5) throw fieldError(`目标 ${index + 1} 权重应为 1—5 的整数`, ['goals', index, 'weight']);
+        if (typeof goal.required !== 'boolean') throw fieldError(`目标 ${index + 1} 必须明确是否为必需项`, ['goals', index, 'required']);
+        return { id, label: text(goal.label, `目标 ${index + 1}`, 300, false, ['goals', index, 'label']), weight, required: goal.required };
       });
     }
     function normalizeTask(draft) {
       if (!draft || typeof draft !== 'object') throw new Error('请先填写任务');
-      const task = { id: text(draft.id, '任务 ID', 100), title: text(draft.title, '任务名称', 3000), description: text(draft.description, '任务要求与输入范围', 3000), scenario: draft.scenario };
-      if (!['coding', 'research', 'data'].includes(task.scenario)) throw new Error('请选择有效的任务类型');
+      const task = { id: text(draft.id, '任务 ID', 100, false, ['id']), title: text(draft.title, '任务名称', 3000, false, ['title']), description: text(draft.description, '任务要求与输入范围', 3000, false, ['description']), scenario: draft.scenario };
+      if (!['coding', 'research', 'data'].includes(task.scenario)) throw fieldError('请选择有效的任务类型', ['scenario']);
       return task;
     }
     function buildDataset(draft) {
@@ -50,18 +56,18 @@
           const check = run.checks && Object.hasOwn(run.checks, goal.id) ? run.checks[goal.id] : undefined;
           if (check !== undefined && (!check || typeof check !== 'object' || Array.isArray(check))) throw new Error(`${label}的目标状态格式错误`);
           const status = check?.status === undefined ? 'unknown' : check.status;
-          const evidence = check?.evidence === undefined ? '' : text(check.evidence, `${label}的证据`, 6000, true);
-          if (!['unknown', 'pass', 'fail'].includes(status)) throw new Error(`${label}的目标状态无效`);
-          if (status !== 'unknown' && !evidence.trim()) throw new Error(`${label}的目标“${goal.label}”已判定，必须填写证据`);
+          const evidence = check?.evidence === undefined ? '' : text(check.evidence, `${label}的证据`, 6000, true, ['runs', index, 'checks', goal.id, 'evidence']);
+          if (!['unknown', 'pass', 'fail'].includes(status)) throw fieldError(`${label}的目标状态无效`, ['runs', index, 'checks', goal.id, 'status']);
+          if (status !== 'unknown' && !evidence.trim()) throw fieldError(`${label}的目标“${goal.label}”已判定，必须填写证据`, ['runs', index, 'checks', goal.id, 'evidence']);
           return [goal.id, { status, evidence }];
         }));
         return {
-          id: run.id === undefined ? `${task.id}-run-${index + 1}` : text(run.id, `${label} ID`, 300),
-          strategy: text(run.strategy, `${label}策略`, 300),
-          model: text(run.model, `${label}模型与版本`, 300),
-          comparisonGroup: text(run.comparisonGroup, `${label}条件组`, 300),
-          tokens: number(run.tokens, `${label} token`, true),
-          durationSec: number(run.durationSec, `${label}耗时`, true), checks, events: []
+          id: run.id === undefined ? `${task.id}-run-${index + 1}` : text(run.id, `${label} ID`, 300, false, ['runs', index, 'id']),
+          strategy: text(run.strategy, `${label}策略`, 300, false, ['runs', index, 'strategy']),
+          model: text(run.model, `${label}模型与版本`, 300, false, ['runs', index, 'model']),
+          comparisonGroup: text(run.comparisonGroup, `${label}条件组`, 300, false, ['runs', index, 'comparisonGroup']),
+          tokens: number(run.tokens, `${label} token`, true, ['runs', index, 'tokens']),
+          durationSec: number(run.durationSec, `${label}耗时`, true, ['runs', index, 'durationSec']), checks, events: []
         };
       });
       const data = { version: 1, demo: false, tasks: [{ ...task, goals, runs }] };
@@ -88,7 +94,7 @@
       })) }));
       return { runs: updated, resetCount };
     }
-    function parseBudget(value) { return number(value, '每条记录的 token 预算', false); }
+    function parseBudget(value) { return number(value, '每条记录的 token 预算', false, ['budget']); }
     return { normalizeTask, normalizeGoals, buildDataset, serializeDataset, parseBudget, updateGoalChecks };
   }
   const api = { MAX_BYTES, createEntryBuilder };

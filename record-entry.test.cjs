@@ -10,6 +10,14 @@ function fixture() {
     goals: [{ id: 'g1', label: '文件可重新导入', weight: 5, required: true }],
     runs: [{ strategy: '按需读取', model: '用户提供的模型版本', comparisonGroup: '相同输入与环境', tokens: '', durationSec: '', checks: { g1: { status: 'unknown', evidence: '' } } }] };
 }
+function assertFieldError(action, fieldPath, message) {
+  assert.throws(action, error => {
+    assert.ok(error instanceof Error);
+    assert.deepEqual(error.fieldPath, fieldPath);
+    assert.match(error.message, message);
+    return true;
+  });
+}
 
 test('未知用量留空转为 null；未填写验收默认 unknown，不生成事件', () => {
   const input = fixture(); input.runs[0].tokens = '  '; delete input.runs[0].checks;
@@ -119,4 +127,64 @@ test('已有记录时禁止删除目标；追加目标以 unknown 开始，不�
   assert.deepEqual(update.runs[0].checks.g2, { status: 'unknown', evidence: '' }); assert.equal(update.resetCount, 1);
   assert.throws(() => B.updateGoalChecks(next, input.goals, update.runs), /不能删除目标/);
   assert.equal(B.updateGoalChecks(next, next, update.runs).resetCount, 0);
+});
+
+test('任务与第二项目标错误提供可定位的字段，不改变原有校验顺序', () => {
+  for (const [key, value, message] of [['title', ' ', /任务名称/], ['description', null, /任务要求/], ['scenario', 'invalid', /任务类型/]]) {
+    const input = fixture(); input[key] = value;
+    assertFieldError(() => B.normalizeTask(input), [key], message);
+  }
+  for (const [key, value, message] of [['label', '', /目标 2/], ['weight', Infinity, /非负有限数/], ['weight', 1.5, /1—5/], ['required', 'true', /必需项/]]) {
+    const input = fixture(); input.goals.push({ ...input.goals[0], id: 'g2', [key]: value });
+    assertFieldError(() => B.normalizeGoals(input.goals), ['goals', 1, key], message);
+  }
+  const multipleErrors = fixture(); multipleErrors.goals[0].weight = 8; multipleErrors.goals[0].label = '';
+  assertFieldError(() => B.normalizeGoals(multipleErrors.goals), ['goals', 0, 'weight'], /1—5/);
+});
+
+test('较后且折叠的记录定位到本条字段，空白未知用量仍合法', () => {
+  for (const [key, value, message] of [
+    ['strategy', '', /记录 3策略/], ['model', null, /记录 3模型与版本/], ['comparisonGroup', ' ', /记录 3条件组/],
+    ['tokens', Infinity, /记录 3 token/], ['tokens', true, /记录 3 token/], ['durationSec', '1e999', /记录 3耗时/], ['durationSec', [], /记录 3耗时/]
+  ]) {
+    const input = fixture(); input.runs = Array.from({ length: 3 }, () => ({ ...structuredClone(input.runs[0]), open: false }));
+    input.runs[2][key] = value;
+    const before = structuredClone(input);
+    assertFieldError(() => B.buildDataset(input), ['runs', 2, key], message);
+    assert.deepEqual(input, before);
+  }
+  const input = fixture(); input.runs[0].tokens = null; input.runs[0].durationSec = ' ';
+  assert.equal(B.buildDataset(input).tasks[0].runs[0].tokens, null);
+  assert.equal(B.buildDataset(input).tasks[0].runs[0].durationSec, null);
+});
+
+test('证据路径原样携带含标点的目标 ID，不拆解为选择器或路径字符串', () => {
+  const goalId = 'g.[1]/checks~"<目标>';
+  const input = fixture(); input.goals[0].id = goalId;
+  input.runs[0].checks = { [goalId]: { status: 'unknown', evidence: '' } };
+  input.runs.push({ ...structuredClone(input.runs[0]), open: false });
+  const check = input.runs[1].checks[goalId];
+  for (const status of ['pass', 'fail']) {
+    check.status = status;
+    assertFieldError(() => B.buildDataset(input), ['runs', 1, 'checks', goalId, 'evidence'], /必须填写证据/);
+  }
+  check.status = 'unknown'; check.evidence = 12;
+  assertFieldError(() => B.buildDataset(input), ['runs', 1, 'checks', goalId, 'evidence'], /6000/);
+  check.status = 'invalid'; check.evidence = '';
+  assertFieldError(() => B.buildDataset(input), ['runs', 1, 'checks', goalId, 'status'], /状态无效/);
+  check.status = 'pass'; input.runs[1].strategy = '';
+  assertFieldError(() => B.buildDataset(input), ['runs', 1, 'checks', goalId, 'evidence'], /必须填写证据/);
+});
+
+test('预算错误定位到预算；无法归因于单个输入的错误保留全局提示', () => {
+  for (const value of ['', null, undefined, -1, Infinity, NaN, true, {}, '0x10', '1e999']) {
+    assertFieldError(() => B.parseBudget(value), ['budget'], /每条记录的 token 预算/);
+  }
+  assert.equal(B.parseBudget('0'), 0);
+  const input = fixture(); input.runs[0].checks.extra = { status: 'unknown', evidence: '' };
+  assert.throws(() => B.buildDataset(input), error => {
+    assert.match(error.message, /不存在目标/);
+    assert.equal(error.fieldPath, undefined);
+    return true;
+  });
 });

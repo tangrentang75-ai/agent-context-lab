@@ -1,6 +1,6 @@
 {
   "name": "agent-context-lab",
-  "version": "0.26.1",
+  "version": "0.26.2",
   "private": true,
   "description": "Local workspace for AI task goals, acceptance evidence and resource budgets",
   "license": "MIT",
